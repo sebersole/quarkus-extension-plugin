@@ -1,0 +1,51 @@
+plugins {
+    id 'java-gradle-plugin'
+    id 'com.gradle.plugin-publish' version '0.20.0'
+}
+
+group 'io.github.sebersole'
+version '1.0-SNAPSHOT'
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    testImplementation 'org.junit.jupiter:junit-jupiter-api:5.8.1'
+    testImplementation 'org.assertj:assertj-core:3.14.0'
+
+    testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.8.1'
+}
+
+var pluginKey = 'quarkusExtensionPlugin';
+var pluginId = 'io.github.sebersole.quarkus-extension';
+
+gradlePlugin {
+    plugins {
+        create( pluginKey ) {
+            id = pluginId
+            implementationClass = "io.github.sebersole.quarkus.QuarkusExtensionPlugin"
+        }
+    }
+}
+
+pluginBundle {
+    website = "https://github.com/hibernate/hibernate-orm/tree/main/tooling/hibernate-gradle-plugin"
+    vcsUrl = "https://github.com/hibernate/hibernate-orm/tree/main/tooling/hibernate-gradle-plugin"
+
+    // sigh
+    mavenCoordinates {
+        groupId = project.group.toString()
+        artifactId = project.name
+        version = project.version.toString()
+    }
+
+    plugins.getByName( pluginKey ) {
+        id = pluginId
+        displayName = "Gradle plugin for building Quarkus extensions"
+    }
+}
+
+test {
+    useJUnitPlatform()
+}

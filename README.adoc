@@ -1,0 +1,1 @@
+Plugin for developing Quarkus extensions offering simplified support for project layout compared to the Maven plugin
