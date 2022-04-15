@@ -15,15 +15,6 @@ import groovy.lang.Closure;
  * @author Steve Ebersole
  */
 public abstract class QuarkusExtensionConfig implements ExtensionAware  {
-	public static final String DSL_EXTENSION_NAME = "quarkusExtension";
-
-	public static final String QUARKUS_GROUP = "io.quarkus";
-
-	public static final String QUARKUS_CORE = "quarkus-core";
-	public static final String QUARKUS_CORE_DEPLOYMENT = "quarkus-core-deployment";
-
-	public static final String QUARKUS_BOM = "quarkus-bom";
-	public static final String QUARKUS_UNIVERSE_COMMUNITY_BOM = "quarkus-universe-bom";
 
 	private final Project project;
 

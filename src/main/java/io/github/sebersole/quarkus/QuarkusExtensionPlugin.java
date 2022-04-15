@@ -4,28 +4,35 @@ import java.util.Locale;
 
 import org.gradle.api.Plugin;
 import org.gradle.api.Project;
+import org.gradle.api.Task;
 import org.gradle.api.artifacts.Configuration;
 import org.gradle.api.artifacts.Dependency;
 import org.gradle.api.file.Directory;
 import org.gradle.api.plugins.JavaLibraryPlugin;
+import org.gradle.api.plugins.JavaPluginExtension;
 import org.gradle.api.provider.Provider;
 import org.gradle.api.publish.PublicationContainer;
 import org.gradle.api.publish.PublishingExtension;
 import org.gradle.api.publish.maven.MavenPublication;
 import org.gradle.api.publish.maven.plugins.MavenPublishPlugin;
-import org.gradle.api.publish.plugins.PublishingPlugin;
 import org.gradle.api.tasks.SourceSet;
 import org.gradle.api.tasks.SourceSetContainer;
 import org.gradle.api.tasks.TaskContainer;
 import org.gradle.api.tasks.javadoc.Javadoc;
 import org.gradle.jvm.tasks.Jar;
 
-import static io.github.sebersole.quarkus.QuarkusExtensionConfig.DSL_EXTENSION_NAME;
-import static io.github.sebersole.quarkus.QuarkusExtensionConfig.QUARKUS_BOM;
-import static io.github.sebersole.quarkus.QuarkusExtensionConfig.QUARKUS_CORE;
-import static io.github.sebersole.quarkus.QuarkusExtensionConfig.QUARKUS_CORE_DEPLOYMENT;
-import static io.github.sebersole.quarkus.QuarkusExtensionConfig.QUARKUS_GROUP;
-import static io.github.sebersole.quarkus.QuarkusExtensionConfig.QUARKUS_UNIVERSE_COMMUNITY_BOM;
+import io.github.sebersole.quarkus.tasks.GenerateBuildStepsList;
+import io.github.sebersole.quarkus.tasks.GenerateConfigRootsList;
+import io.github.sebersole.quarkus.tasks.GenerateExtensionPropertiesFile;
+import io.github.sebersole.quarkus.tasks.IndexManager;
+import io.github.sebersole.quarkus.tasks.IndexerTask;
+
+import static io.github.sebersole.quarkus.Names.DSL_EXTENSION_NAME;
+import static io.github.sebersole.quarkus.Names.QUARKUS_BOM;
+import static io.github.sebersole.quarkus.Names.QUARKUS_CORE;
+import static io.github.sebersole.quarkus.Names.QUARKUS_CORE_DEPLOYMENT;
+import static io.github.sebersole.quarkus.Names.QUARKUS_GROUP;
+import static io.github.sebersole.quarkus.Names.QUARKUS_UNIVERSE_COMMUNITY_BOM;
 
 /**
  * Plugin for defining Quarkus extensions
@@ -33,12 +40,8 @@ import static io.github.sebersole.quarkus.QuarkusExtensionConfig.QUARKUS_UNIVERS
  * @author Steve Ebersole
  */
 public class QuarkusExtensionPlugin implements Plugin<Project> {
-	private Project project;
-
 	@Override
-	public void apply(Project target) {
-		project = target;
-
+	public void apply(Project project) {
 		project.getPluginManager().apply( JavaLibraryPlugin.class );
 		//project.getPluginManager().apply( PublishingPlugin.class );
 		project.getPluginManager().apply( MavenPublishPlugin.class );
@@ -48,6 +51,10 @@ public class QuarkusExtensionPlugin implements Plugin<Project> {
 				QuarkusExtensionConfig.class,
 				project
 		);
+
+		final JavaPluginExtension javaPluginExtension = project.getExtensions().getByType( JavaPluginExtension.class );
+		javaPluginExtension.withJavadocJar();
+		javaPluginExtension.withSourcesJar();
 
 		preparePlatforms( config, project );
 		prepareRuntime( config, project );
@@ -77,6 +84,9 @@ public class QuarkusExtensionPlugin implements Plugin<Project> {
 	}
 
 	private void prepareRuntime(QuarkusExtensionConfig config, Project project) {
+		final SourceSetContainer sourceSets = project.getExtensions().getByType( SourceSetContainer.class );
+		final SourceSet mainSourceSet = sourceSets.getByName( "main" );
+
 		project.getDependencies().add(
 				"implementation",
 				quarkusCore( project )
@@ -88,6 +98,37 @@ public class QuarkusExtensionPlugin implements Plugin<Project> {
 			pub.setArtifactId( project.getName() );
 			pub.from( project.getComponents().getByName( "java" ) );
 		} );
+
+
+		final Jar runtimeJarTask = (Jar) project.getTasks().getByName( mainSourceSet.getJarTaskName() );
+		final IndexManager indexManager = new IndexManager( mainSourceSet, project );
+		final IndexerTask indexerTask = project.getTasks().create(
+				mainSourceSet.getTaskName( "index", "classes" ),
+				IndexerTask.class,
+				indexManager
+		);
+
+		final GenerateConfigRootsList configRootsTask = project.getTasks().create(
+				GenerateConfigRootsList.TASK_NAME,
+				GenerateConfigRootsList.class,
+				indexManager
+		);
+		runtimeJarTask.from( configRootsTask.getListFileReference(), (copySpec) -> {
+			copySpec.into( "META-INF" );
+		} );
+
+		final GenerateExtensionPropertiesFile extensionPropertiesTask = project.getTasks().create(
+				GenerateExtensionPropertiesFile.TASK_NAME,
+				GenerateExtensionPropertiesFile.class
+		);
+		runtimeJarTask.from( extensionPropertiesTask.getPropertiesFile(), (copySpec) -> {
+			copySpec.into( "META-INF" );
+		} );
+
+		indexerTask.dependsOn( mainSourceSet.getCompileJavaTaskName() );
+		configRootsTask.dependsOn( indexerTask );
+		runtimeJarTask.dependsOn( configRootsTask );
+		runtimeJarTask.dependsOn( extensionPropertiesTask );
 	}
 
 	private void prepareDeployment(QuarkusExtensionConfig config, Project project) {
@@ -96,18 +137,6 @@ public class QuarkusExtensionPlugin implements Plugin<Project> {
 
 		final SourceSet mainSourceSet = sourceSets.getByName( "main" );
 		final SourceSet testSourceSet = sourceSets.getByName( "test" );
-
-//		final Jar deploymentJarTask = taskContainer.create( "deploymentJar", Jar.class, (task) -> {
-//			task.setDescription( "Creates the deployment artifact" );
-//			task.dependsOn( taskContainer.getByName( "compileDeploymentJava" ) );
-//
-//			task.getArchiveBaseName().set( mainJarTask.getArchiveBaseName() );
-//			task.getArchiveAppendix().set( "deployment" );
-//
-//			task.from( sourceSets.getByName( "deployment" ).getJava().getDestinationDirectory() );
-//			task.getDestinationDirectory().set( mainJarTask.getDestinationDirectory() );
-//		} );
-//
 
 		preparePublication( deploymentSourceSet, config, project );
 
@@ -130,6 +159,26 @@ public class QuarkusExtensionPlugin implements Plugin<Project> {
 		);
 
 		taskContainer.getByName( testSourceSet.getCompileJavaTaskName() ).dependsOn( deploymentJarTask );
+
+
+		final IndexManager indexManager = new IndexManager( deploymentSourceSet, project );
+		final IndexerTask indexerTask = project.getTasks().create(
+				deploymentSourceSet.getTaskName( "index", "classes" ),
+				IndexerTask.class,
+				indexManager
+		);
+
+		final GenerateBuildStepsList buildStepsListTask = project.getTasks().create(
+				GenerateBuildStepsList.TASK_NAME,
+				GenerateBuildStepsList.class,
+				indexManager
+		);
+		deploymentJarTask.from( buildStepsListTask.getListFileReference(), (copySpec) -> {
+			copySpec.into( "META-INF" );
+		} );
+
+		indexerTask.dependsOn( deploymentSourceSet.getCompileJavaTaskName() );
+		buildStepsListTask.dependsOn( indexerTask );
 	}
 
 	private void preparePublication(SourceSet sourceSet, QuarkusExtensionConfig config, Project project) {
@@ -140,7 +189,8 @@ public class QuarkusExtensionPlugin implements Plugin<Project> {
 
 		final TaskContainer taskContainer = project.getTasks();
 		final Jar mainJarTask = (Jar) taskContainer.getByName( mainSourceSet.getJarTaskName() );
-		final Jar deploymentJarTask = taskContainer.create( sourceSet.getJarTaskName(), Jar.class, (task) -> {
+
+		final Jar jarTask = taskContainer.create( sourceSet.getJarTaskName(), Jar.class, (task) -> {
 			task.setDescription( "Creates the " + publicationName + " artifact" );
 			task.dependsOn( taskContainer.getByName( sourceSet.getCompileJavaTaskName() ) );
 
@@ -156,50 +206,49 @@ public class QuarkusExtensionPlugin implements Plugin<Project> {
 		final PublishingExtension publishingExtension = project.getExtensions().getByType( PublishingExtension.class );
 		final PublicationContainer publications = publishingExtension.getPublications();
 		final MavenPublication publication = publications.create( publicationName, MavenPublication.class );
-		publication.artifact( deploymentJarTask );
+		publication.artifact( jarTask );
 
-		if ( project.getTasks().findByName( mainSourceSet.getJavadocJarTaskName() ) != null ) {
-			// assume to publish the deployment's javadoc jar as well
-			// todo : or add a DSL flag?  or always do it?
+		final Provider<Directory> javadocDir = project.getLayout().getBuildDirectory().dir( "docs/javadoc-" + publicationName );
 
-			final Provider<Directory> javadocDir = project.getLayout().getBuildDirectory().dir( "docs/javadoc-deployment" );
+		final Javadoc javadocTask = taskContainer.create( sourceSet.getJavadocTaskName(), Javadoc.class, (task) -> {
+			task.setDescription( "Generates the deployment Javadocs" );
+			task.dependsOn( sourceSet.getCompileJavaTaskName(), sourceSet.getProcessResourcesTaskName() );
 
-			final Javadoc javadocTask = taskContainer.create( sourceSet.getJavadocTaskName(), Javadoc.class, (task) -> {
-				task.setDescription( "Generates the deployment Javadocs" );
-				task.dependsOn( sourceSet.getCompileJavaTaskName(), sourceSet.getProcessResourcesTaskName() );
+			task.source( sourceSet.getAllJava() );
+			task.setClasspath( sourceSet.getCompileClasspath() );
+			task.setDestinationDir( javadocDir.get().getAsFile() );
+		} );
 
-				task.source( sourceSet.getJava().getDestinationDirectory() );
-				task.setClasspath( sourceSet.getCompileClasspath() );
-				task.setDestinationDir( javadocDir.get().getAsFile() );
-			} );
+		final Jar javadocJarTask = taskContainer.create( sourceSet.getJavadocJarTaskName(), Jar.class );
+		javadocJarTask.setDescription( "Creates the " + publicationName + " Javadoc artifact" );
+		javadocJarTask.dependsOn( javadocTask );
 
-			final Jar javadocJarTask = taskContainer.create( sourceSet.getJavadocJarTaskName(), Jar.class );
-			javadocJarTask.setDescription( "Creates the " + publicationName + " Javadoc artifact" );
-			javadocJarTask.dependsOn( javadocTask );
+		javadocJarTask.getArchiveBaseName().set( mainJarTask.getArchiveBaseName() );
+		javadocJarTask.getArchiveAppendix().set( publicationName );
+		javadocJarTask.getArchiveClassifier().set( "javadoc" );
+		javadocJarTask.getArchiveVersion().set( project.provider( () -> project.getVersion().toString() ) );
 
-			javadocJarTask.getArchiveBaseName().set( mainJarTask.getArchiveBaseName() );
-			javadocJarTask.getArchiveAppendix().set( "publicationName" );
-			javadocJarTask.getArchiveClassifier().set( "javadoc" );
-			javadocJarTask.getArchiveVersion().set( project.provider( () -> project.getVersion().toString() ) );
+		javadocJarTask.from( javadocDir );
+		javadocJarTask.getDestinationDirectory().set( mainJarTask.getDestinationDirectory() );
 
-			javadocJarTask.from( javadocDir );
-			javadocJarTask.getDestinationDirectory().set( mainJarTask.getDestinationDirectory() );
+		publication.artifact( javadocJarTask );
 
-			publication.artifact( javadocJarTask );
+		final Jar sourcesJarTask = taskContainer.create( sourceSet.getSourcesJarTaskName(), Jar.class );
+		sourcesJarTask.setDescription( "Creates the " + publicationName + " sources artifact" );
 
-			final Jar sourcesJarTask = taskContainer.create( sourceSet.getSourcesJarTaskName(), Jar.class );
-			sourcesJarTask.setDescription( "Creates the " + publicationName + " sources artifact" );
+		sourcesJarTask.getArchiveBaseName().set( mainJarTask.getArchiveBaseName() );
+		sourcesJarTask.getArchiveAppendix().set( publicationName );
+		sourcesJarTask.getArchiveClassifier().set( "sources" );
+		sourcesJarTask.getArchiveVersion().set( project.provider( () -> project.getVersion().toString() ) );
 
-			sourcesJarTask.getArchiveBaseName().set( mainJarTask.getArchiveBaseName() );
-			sourcesJarTask.getArchiveAppendix().set( publicationName );
-			sourcesJarTask.getArchiveClassifier().set( "sources" );
-			sourcesJarTask.getArchiveVersion().set( project.provider( () -> project.getVersion().toString() ) );
+		sourcesJarTask.from( sourceSet.getAllSource() );
+		sourcesJarTask.getDestinationDirectory().set( mainJarTask.getDestinationDirectory() );
 
-			sourcesJarTask.from( sourceSet.getAllSource() );
-			sourcesJarTask.getDestinationDirectory().set( mainJarTask.getDestinationDirectory() );
+		publication.artifact( sourcesJarTask );
 
-			publication.artifact( sourcesJarTask );
-		}
+		final Task buildTask = taskContainer.getByName( "build" );
+		buildTask.dependsOn( javadocJarTask );
+		buildTask.dependsOn( sourcesJarTask );
 	}
 
 	private void prepareSpi(QuarkusExtensionConfig config, Project project) {
@@ -222,7 +271,6 @@ public class QuarkusExtensionPlugin implements Plugin<Project> {
 					mainSourceSet.getImplementationConfigurationName(),
 					project.files( spiJarTask.getArchiveFile() )
 			);
-
 		} );
 	}
 

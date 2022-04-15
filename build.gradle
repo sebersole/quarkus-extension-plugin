@@ -1,16 +1,26 @@
 plugins {
     id 'java-gradle-plugin'
     id 'com.gradle.plugin-publish' version '0.20.0'
+
+    // for local publishing (local plugin testing)
+    id 'maven-publish'
 }
 
-group 'io.github.sebersole'
+group 'io.github.sebersole.quarkus'
 version '1.0-SNAPSHOT'
 
 repositories {
     mavenCentral()
 }
 
+java {
+    withJavadocJar()
+    withSourcesJar()
+}
+
 dependencies {
+    implementation 'org.jboss:jandex:2.4.2.Final'
+
     testImplementation 'org.junit.jupiter:junit-jupiter-api:5.8.1'
     testImplementation 'org.assertj:assertj-core:3.14.0'
 
