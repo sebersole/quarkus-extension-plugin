@@ -8,6 +8,7 @@ repositories {
 
 group = 'io.github.sebersole.quarkus'
 version = '1.0-SNAPSHOT'
+description = "Quarkus extension for testing this Gradle extension plugin (default values)"
 
 dependencies {
     quarkusPlatforms enforcedPlatform( 'io.quarkus:quarkus-bom:2.8.0.Final' )
@@ -21,12 +22,3 @@ java {
     withSourcesJar()
 }
 
-quarkusExtension {
-    name = "Basic Quarkus extension"
-    description = "Quarkus extension for testing this Gradle extension plugin"
-
-    status = "stable"
-    guide = "https://hibernate.org"
-    category "sample"
-    keyword "gradle", "sample"
-}

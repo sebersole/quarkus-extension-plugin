@@ -97,7 +97,7 @@ public class BasicBundlingTest {
 				final GenerateDescriptor.ExternalizableDescriptor value = mapper
 						.readValue( jarFile.getInputStream( yamlEntry ), GenerateDescriptor.ExternalizableDescriptor.class );
 
-				assertThat( value.getName() ).isEqualTo( "basic-extension" );
+				assertThat( value.getName() ).isEqualTo( "Basic Quarkus extension" );
 				assertThat( value.getDescription() ).isEqualTo( "Quarkus extension for testing this Gradle extension plugin" );
 
 				assertThat( value.getMetadata().getStatus() ).isEqualTo( "stable" );

@@ -1,1 +1,228 @@
-Plugin for developing Quarkus extensions offering simplified support for project layout compared to the Maven plugin
+Plugin for developing Quarkus extensions offering simplified support for project layout and convention.
+
+See the https://plugins.gradle.org/plugin/io.github.sebersole.quarkus-extension[plugin portal] page for up-to-date version details.
+
+== Apply Plugin
+
+Omitting version details, the preferred way to apply the plugin is using Gradle's `plugins {}` block:
+
+[source]
+----
+plugins {
+    id 'io.github.sebersole.quarkus-extension'
+}
+----
+
+Applying the plugin has the following effects:
+
+* Applies the `java-library` plugin.
+* Applies the `maven-publish` pluginfootnote:[At the moment, only Maven publishing is supported; support for Ivy is planned as well.].
+* Enables publishing of the project's Javadoc and sources.
+* Prepares the different SourceSets and Configurations - see <<layout>>.
+* Applies a DSL extension - see <<configure>>.
+* Prepares the publications - see <<publications>>.
+
+
+[[layout]]
+== Project Layout (SourceSets and Configurations)
+
+=== Platforms
+
+The plugin creates a Gradle Configuration named `quarkusPlatforms` which is used to apply platform BOM files as
+Gradle enforced-platforms.  E.g., to use Quarkus `2.8.0.Final`:
+
+[source]
+----
+dependencies {
+    quarkusPlatforms enforcedPlatform( 'io.quarkus:quarkus-bom:2.8.0.Final' )
+}
+----
+
+This platform Configuration is then applied to all other Configurations (via extendsFrom).
+
+NOTE::See https://docs.gradle.org/current/userguide/java_library_plugin.html#sec:java_library_separation
+for a discussion of the Configurations related to Java SourceSets.
+
+
+=== Main SourceSet
+
+The `main` SourceSet is the one created by the `java-library` plugin.  It defines the extension's
+runtime artifact.
+
+We have the following configurable Dependency Configurations:
+
+- `api`
+- `implementation`
+- `compileOnly`
+- `compileOnlyApi`
+- `runtimeOnly`
+
+
+=== Deployment SourceSet
+
+This plugin creates a Java SourceSet named `deployment` which represents the deployment artifact (if one).
+
+We have the following configurable Dependency Configurations:
+
+- `deploymentApi`
+- `deploymentImplementation`
+- `deploymentCompileOnly`
+- `deploymentCompileOnlyApi`
+- `deploymentRuntimeOnly`
+
+The runtime artifact is added as a `deploymentCompileOnly` dependency
+
+
+=== SPI SourceSet
+
+The plugin also creates a Java SourceSet named `spi` to represent the extension's SPI artifact (if one).
+
+We have the following configurable Dependency Configurations:
+
+- `spiApi`
+- `spiImplementation`
+- `spiCompileOnly`
+- `spiCompileOnlyApi`
+- `spiRuntimeOnly`
+
+SPI is automatically added as an `implementation` dependency for the extension's runtime artifact.
+
+
+=== Test SourceSet
+
+The `test` SourceSet is the one created by the `java-library` plugin.  It defines the extension's testing.
+
+We have the following configurable Dependency Configurations:
+
+- `testImplementation`
+- `testCompileOnly`
+- `testRuntimeOnly`
+
+`main`, `deployment` and `spi` are all defined as `testImplementation` dependencies.
+
+
+[[publications]]
+== Publications
+
+NOTE::At the moment, only Maven publishing is supported.
+
+The plugin creates a number of `MavenPublication` references.
+
+
+runtime::`MavenPublication` related to the `main` source-set.
+deployment::(if one) `MavenPublication` related to the `deployment` source-set.
+spi::(if one) `MavenPublication` related to the `spi` source-set.
+
+Assuming a project named `confungulator-quarkus`:
+
+runtime::The artifact-id would be `confungulator-quarkus`.
+deployment::The artifact-id would be `confungulator-quarkus-deployment`.
+spi::The artifact-id would be `confungulator-quarkus-spi`.
+
+Long story short, this translates 3 different Maven GAV (group-artifact-version) coordinates:
+
+* `io.github.sebersole.quarkus:confungulator-quarkus:${version}`
+* `io.github.sebersole.quarkus:confungulator-quarkus-deployment:${version}`
+* `io.github.sebersole.quarkus:confungulator-quarkus-spi:${version}`
+
+
+Extension builds would need to define `MavenRepository` definition with the `PublishingExtension`.  E.g.
+
+[source]
+----
+publishing {
+    repositories {
+        confungulator(MavenRepository) {
+            ...
+        }
+    }
+}
+----
+
+See the https://docs.gradle.org/current/userguide/publishing_maven.html[documentation] for the Gradle
+`maven-publish` plugin for more information.
+
+
+[[configure]]
+== Configure Plugin
+
+The full configuration for the plugin is exposed as a Gradle DSL extension named `quarkusExtension`
+of type `io.github.sebersole.quarkus.ExtensionDescriptor`.  This basically exposes configuring the
+extension's YAML descriptor.
+
+name:: The extension's name.  Defaults to the Gradle `Project#name`.
+description:: The description of the extension.  Defaults to the Gradle `Project#description`.
+status:: The status of the extension.  Defaults to "development".
+guide:: The URL for the extension's User Guide.  No default.
+categories:: The categories this extension should be listed under.  No defaults.
+keywords:: Any keywords this extension should be searchable under.  No defaults.
+
+Assuming a project named `confungulator-quarkus`...
+
+=== Basics
+
+.Basic configuration
+====
+[source]
+----
+group = 'io.guthub.sebersole.quarkus'
+version = '1.0.0'
+description = "Extension for integratring Confungulator into Quarkus"
+
+quarkusExtension {
+    name = "Confungulator Quarkus Extension"
+    status = "stable"
+}
+----
+====
+
+We'd have the 3 publications.  The YAML descriptor generated here would be:
+
+[source,yaml]
+----
+---
+name: "Confungulator Quarkus Extension"
+description: "Extension for integrating Confungulator into Quarkus"
+group-id: "io.github.sebersole.quarkus"
+artifact-id: "confungulator-quarkus"
+version: "1.0.0"
+metadata:
+  status: "stable"
+----
+
+=== Categories and Keywords
+
+[source]
+----
+group = 'io.guthub.sebersole.quarkus'
+version = '1.0.0'
+description = "Extension for integratring Confungulator into Quarkus"
+
+quarkusExtension {
+    name = "Confungulator Quarkus Extension"
+    status = "stable"
+    category "confungulator"
+    keyword "confungulator", "confungulation"
+}
+----
+
+producing
+
+[source,yaml]
+----
+---
+name: "Confungulator Quarkus Extension"
+description: "Extension for integrating Confungulator into Quarkus"
+group-id: "io.github.sebersole.quarkus"
+artifact-id: "confungulator-quarkus"
+version: "1.0.0"
+metadata:
+  status: "stable"
+  categories:
+  - "confungulator"
+  keywords:
+  - "confungulator"
+  - "confungulation"
+----
+
+

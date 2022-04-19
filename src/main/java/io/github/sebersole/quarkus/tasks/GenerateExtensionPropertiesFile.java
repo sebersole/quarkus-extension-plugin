@@ -7,6 +7,7 @@ import java.util.Locale;
 
 import org.gradle.api.DefaultTask;
 import org.gradle.api.file.RegularFileProperty;
+import org.gradle.api.tasks.CacheableTask;
 import org.gradle.api.tasks.OutputFile;
 import org.gradle.api.tasks.TaskAction;
 
@@ -15,6 +16,7 @@ import io.github.sebersole.quarkus.Names;
 /**
  * @author Steve Ebersole
  */
+@CacheableTask
 public abstract class GenerateExtensionPropertiesFile extends DefaultTask {
 	public static final String TASK_NAME = "generateExtensionProperties";
 

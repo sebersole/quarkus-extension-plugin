@@ -15,9 +15,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import io.github.sebersole.quarkus.ExtensionDescriptor;
-import io.github.sebersole.quarkus.ExtensionMetadataDescriptor;
 import io.github.sebersole.quarkus.Names;
-import io.github.sebersole.quarkus.QuarkusExtensionConfig;
 
 /**
  * @author Steve Ebersole
@@ -28,15 +26,15 @@ public abstract class GenerateDescriptor extends DefaultTask {
 	public static final String YAML_NAME = "quarkus-extension.yaml";
 	public static final String STANDARD_YAML_PATH = "quarkus/" + YAML_NAME;
 
-	private final RegularFileProperty descriptorFileReference;
 	private final ExtensionDescriptor extensionDescriptor;
+	private final RegularFileProperty descriptorFileReference;
 
 	@Inject
-	public GenerateDescriptor(QuarkusExtensionConfig config) {
+	public GenerateDescriptor(ExtensionDescriptor config) {
 		setGroup( Names.TASK_GROUP );
 		setDescription( "Generates the extension descriptor file" );
 
-		extensionDescriptor = config.getDescriptor();
+		extensionDescriptor = config;
 
 		descriptorFileReference = getProject().getObjects().fileProperty();
 		descriptorFileReference.convention(
@@ -87,9 +85,9 @@ public abstract class GenerateDescriptor extends DefaultTask {
 		}
 
 		public ExternalizableDescriptor(ExtensionDescriptor descriptor) {
-			name = descriptor.getNameProperty().get();
-			description = descriptor.getDescriptionProperty().get();
-			metadata = new ExternalizableMetadata( descriptor.getMetadata() );
+			name = descriptor.getName().get();
+			description = descriptor.getDescription().get();
+			metadata = new ExternalizableMetadata( descriptor );
 		}
 
 
@@ -134,11 +132,11 @@ public abstract class GenerateDescriptor extends DefaultTask {
 		public ExternalizableMetadata() {
 		}
 
-		public ExternalizableMetadata(ExtensionMetadataDescriptor metadata) {
-			status = metadata.getStatusProperty().get();
-			guide = metadata.getGuideProperty().get();
-			categories = metadata.getCategoriesProperty().get();
-			keywords = metadata.getKeywordsProperty().get();
+		public ExternalizableMetadata(ExtensionDescriptor descriptor) {
+			status = descriptor.getStatus().get();
+			guide = descriptor.getGuide().getOrNull();
+			categories = descriptor.getCategories().get();
+			keywords = descriptor.getKeywords().get();
 		}
 
 		public String getStatus() {

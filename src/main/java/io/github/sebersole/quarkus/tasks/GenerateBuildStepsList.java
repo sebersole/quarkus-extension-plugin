@@ -7,18 +7,18 @@ import java.nio.charset.StandardCharsets;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
-
 import javax.inject.Inject;
 
 import org.gradle.api.DefaultTask;
-import org.gradle.api.file.RegularFile;
+import org.gradle.api.file.Directory;
 import org.gradle.api.file.RegularFileProperty;
 import org.gradle.api.provider.Provider;
 import org.gradle.api.tasks.CacheableTask;
-import org.gradle.api.tasks.InputFile;
+import org.gradle.api.tasks.InputDirectory;
 import org.gradle.api.tasks.OutputFile;
 import org.gradle.api.tasks.PathSensitive;
 import org.gradle.api.tasks.PathSensitivity;
+import org.gradle.api.tasks.SkipWhenEmpty;
 import org.gradle.api.tasks.TaskAction;
 
 import org.jboss.jandex.AnnotationInstance;
@@ -51,10 +51,11 @@ public abstract class GenerateBuildStepsList extends DefaultTask {
 		listFile.convention( getProject().getLayout().getBuildDirectory().file( "quarkus/quarkus-build-steps.list" ) );
 	}
 
-	@InputFile
+	@InputDirectory
 	@PathSensitive( PathSensitivity.RELATIVE )
-	public Provider<RegularFile> getIndexFileReference() {
-		return indexManager.getIndexFileReferenceAccess();
+	@SkipWhenEmpty
+	public Provider<Directory> getClassesToProcess() {
+		return indexManager.getSourceSetToIndex().getJava().getDestinationDirectory();
 	}
 
 	@OutputFile

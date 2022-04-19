@@ -29,11 +29,9 @@ import io.github.sebersole.quarkus.tasks.IndexManager;
 import io.github.sebersole.quarkus.tasks.IndexerTask;
 
 import static io.github.sebersole.quarkus.Names.DSL_EXTENSION_NAME;
-import static io.github.sebersole.quarkus.Names.QUARKUS_BOM;
 import static io.github.sebersole.quarkus.Names.QUARKUS_CORE;
 import static io.github.sebersole.quarkus.Names.QUARKUS_CORE_DEPLOYMENT;
 import static io.github.sebersole.quarkus.Names.QUARKUS_GROUP;
-import static io.github.sebersole.quarkus.Names.QUARKUS_UNIVERSE_COMMUNITY_BOM;
 
 /**
  * Plugin for defining Quarkus extensions
@@ -46,9 +44,9 @@ public class QuarkusExtensionPlugin implements Plugin<Project> {
 		project.getPluginManager().apply( JavaLibraryPlugin.class );
 		project.getPluginManager().apply( MavenPublishPlugin.class );
 
-		final QuarkusExtensionConfig config = project.getExtensions().create(
+		final ExtensionDescriptor config = project.getExtensions().create(
 				DSL_EXTENSION_NAME,
-				QuarkusExtensionConfig.class,
+				ExtensionDescriptor.class,
 				project
 		);
 
@@ -56,34 +54,24 @@ public class QuarkusExtensionPlugin implements Plugin<Project> {
 		javaPluginExtension.withJavadocJar();
 		javaPluginExtension.withSourcesJar();
 
-		preparePlatforms( config, project );
+		preparePlatforms( project );
 		prepareRuntime( config, project );
-		prepareDeployment( config, project );
-		prepareSpi( config, project );
+		prepareDeployment( project );
+		prepareSpi( project );
 	}
 
-	private void preparePlatforms(QuarkusExtensionConfig config, Project project) {
-		final Configuration quarkusPlatforms = project.getConfigurations().maybeCreate( "quarkusPlatforms" );
-		quarkusPlatforms.setDescription( "Configuration to specify all Quarkus platforms (BOMs) to be applied" );
+	private void preparePlatforms(Project project) {
+		final Configuration platforms = project.getConfigurations().maybeCreate( Names.PLATFORMS_CONFIG_NAME );
+		platforms.setDescription( "Configuration to specify all Quarkus platforms (BOMs) to be applied" );
 
 		project.getConfigurations().all( (configuration) -> {
-			if ( configuration != quarkusPlatforms ) {
-				configuration.extendsFrom( quarkusPlatforms );
+			if ( configuration != platforms ) {
+				configuration.extendsFrom( platforms );
 			}
 		} );
-
-		project.getDependencies().add(
-				quarkusPlatforms.getName(),
-				config.getQuarkusVersionProperty().map( (version) -> quarkusPlatform( version, project ) )
-		);
-
-		project.getDependencies().add(
-				quarkusPlatforms.getName(),
-				config.getApplyUniversePlatformProperty().map( (enabled) -> universePlatform( enabled, project, config ) )
-		);
 	}
 
-	private void prepareRuntime(QuarkusExtensionConfig config, Project project) {
+	private void prepareRuntime(ExtensionDescriptor config, Project project) {
 		final SourceSetContainer sourceSets = project.getExtensions().getByType( SourceSetContainer.class );
 		final SourceSet mainSourceSet = sourceSets.getByName( "main" );
 
@@ -132,14 +120,14 @@ public class QuarkusExtensionPlugin implements Plugin<Project> {
 		runtimeJarTask.dependsOn( extensionPropertiesTask );
 	}
 
-	private void prepareDeployment(QuarkusExtensionConfig config, Project project) {
+	private void prepareDeployment(Project project) {
 		final SourceSetContainer sourceSets = project.getExtensions().getByType( SourceSetContainer.class );
 		final SourceSet deploymentSourceSet = sourceSets.maybeCreate( "deployment" );
 
 		final SourceSet mainSourceSet = sourceSets.getByName( "main" );
 		final SourceSet testSourceSet = sourceSets.getByName( "test" );
 
-		preparePublication( deploymentSourceSet, config, project );
+		preparePublication( deploymentSourceSet, project );
 
 		final TaskContainer taskContainer = project.getTasks();
 		final Jar mainJarTask = (Jar) taskContainer.getByName( mainSourceSet.getJarTaskName() );
@@ -180,7 +168,7 @@ public class QuarkusExtensionPlugin implements Plugin<Project> {
 		buildStepsListTask.dependsOn( indexerTask );
 	}
 
-	private void preparePublication(SourceSet sourceSet, QuarkusExtensionConfig config, Project project) {
+	private void preparePublication(SourceSet sourceSet, Project project) {
 		final String publicationName = sourceSet.getName();
 
 		final SourceSetContainer sourceSets = project.getExtensions().getByType( SourceSetContainer.class );
@@ -250,7 +238,7 @@ public class QuarkusExtensionPlugin implements Plugin<Project> {
 		buildTask.dependsOn( sourcesJarTask );
 	}
 
-	private void prepareSpi(QuarkusExtensionConfig config, Project project) {
+	private void prepareSpi(Project project) {
 		final SourceSetContainer sourceSets = project.getExtensions().getByType( SourceSetContainer.class );
 		final SourceSet spiSourceSet = sourceSets.maybeCreate( "spi" );
 		final SourceSet mainSourceSet = sourceSets.getByName( "main" );
@@ -263,7 +251,7 @@ public class QuarkusExtensionPlugin implements Plugin<Project> {
 
 			project.getLogger().debug( "Starting SPI module set-up" );
 
-			preparePublication( spiSourceSet, config, project );
+			preparePublication( spiSourceSet, project );
 
 			final Jar spiJarTask = (Jar) project.getTasks().getByName( spiSourceSet.getJarTaskName() );
 			project.getDependencies().add(
@@ -279,30 +267,6 @@ public class QuarkusExtensionPlugin implements Plugin<Project> {
 
 	private Dependency quarkusCoreDeployment(Project project) {
 		return project.getDependencies().module( groupArtifact( QUARKUS_GROUP, QUARKUS_CORE_DEPLOYMENT ) );
-	}
-
-	private Dependency quarkusPlatform(String version, Project project) {
-		return project.getDependencies().enforcedPlatform( groupArtifactVersion( QUARKUS_GROUP, QUARKUS_BOM, version ) );
-	}
-
-	private Dependency universePlatform(Boolean enabled, Project project, QuarkusExtensionConfig config) {
-		if ( enabled != Boolean.TRUE ) {
-			return null;
-		}
-
-		return project.getDependencies().enforcedPlatform(
-				groupArtifactVersion( QUARKUS_GROUP, QUARKUS_UNIVERSE_COMMUNITY_BOM, config.getQuarkusVersion() )
-		);
-	}
-
-	public static String groupArtifactVersion(String group, String artifact, String version) {
-		return String.format(
-				Locale.ROOT,
-				"%s:%s:%s",
-				group,
-				artifact,
-				version
-		);
 	}
 
 	public static String groupArtifact(String group, String artifact) {
