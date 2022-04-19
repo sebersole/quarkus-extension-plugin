@@ -5,7 +5,6 @@ package io.github.sebersole.quarkus;
  */
 public interface Names {
 	String DSL_EXTENSION_NAME = "quarkusExtension";
-	String BUNDLE_TASK_NAME = "bundleExtension";
 
 	String QUARKUS_GROUP = "io.quarkus";
 	String QUARKUS_CORE = "quarkus-core";

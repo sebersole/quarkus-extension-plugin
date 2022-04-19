@@ -8,6 +8,7 @@ repositories {
 
 group = 'io.github.sebersole.quarkus'
 version = '1.0-SNAPSHOT'
+description = "Quarkus extension for testing this Gradle extension plugin"
 
 dependencies {
     testImplementation 'org.junit.jupiter:junit-jupiter-api:5.8.1'
@@ -17,4 +18,18 @@ dependencies {
 java {
     withJavadocJar()
     withSourcesJar()
+}
+
+quarkusExtension {
+    descriptor {
+//        name = "Basic Quarkus extension"
+//        description = "Quarkus extension for testing this Gradle extension plugin"
+
+        metadata {
+            status = "stable"
+            guide = "https://hibernate.org"
+            categories += "sample"
+            keywords += [ "gradle", "sample" ]
+        }
+    }
 }

@@ -18,6 +18,13 @@ import org.gradle.testkit.runner.GradleRunner;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
+import io.github.sebersole.quarkus.tasks.GenerateDescriptor;
+
+import static io.github.sebersole.quarkus.tasks.GenerateDescriptor.STANDARD_YAML_PATH;
+import static io.github.sebersole.quarkus.tasks.GenerateDescriptor.YAML_NAME;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.gradle.testkit.runner.TaskOutcome.SUCCESS;
 
@@ -67,8 +74,44 @@ public class BasicBundlingTest {
 		final File jar = new File( buildDir, "libs/basic-extension-1.0-SNAPSHOT.jar" );
 		assertThat( jar ).exists();
 
+		checkExtensionDescriptor( buildDir, jar );
 		checkConfigRoots( buildDir, jar );
 		checkExtensionProperties( buildDir, jar );
+	}
+
+	private void checkExtensionDescriptor(File buildDir, File jar) {
+		final File yamlFile = new File( buildDir, STANDARD_YAML_PATH );
+		assertThat( yamlFile ).exists();
+
+		try {
+			final JarFile jarFile = new JarFile( jar );
+			final ZipEntry yamlEntry = jarFile.getEntry( "META-INF/" + YAML_NAME );
+			assertThat( yamlEntry ).isNotNull();
+
+
+			final ObjectMapper mapper = new ObjectMapper( new YAMLFactory() )
+					.findAndRegisterModules()
+					.disable( SerializationFeature.WRITE_DATES_AS_TIMESTAMPS );
+
+			try {
+				final GenerateDescriptor.ExternalizableDescriptor value = mapper
+						.readValue( jarFile.getInputStream( yamlEntry ), GenerateDescriptor.ExternalizableDescriptor.class );
+
+				assertThat( value.getName() ).isEqualTo( "basic-extension" );
+				assertThat( value.getDescription() ).isEqualTo( "Quarkus extension for testing this Gradle extension plugin" );
+
+				assertThat( value.getMetadata().getStatus() ).isEqualTo( "stable" );
+				assertThat( value.getMetadata().getGuide() ).isEqualTo( "https://hibernate.org" );
+				assertThat( value.getMetadata().getCategories() ).contains( "sample" );
+				assertThat( value.getMetadata().getKeywords() ).contains( "sample", "gradle" );
+			}
+			catch (Exception e) {
+				throw new RuntimeException( "Unable to read extension YAML descriptor file", e );
+			}
+		}
+		catch (IOException e) {
+			throw new RuntimeException( "Error accessing runtime jar " + jar.getAbsolutePath() );
+		}
 	}
 
 	private void checkConfigRoots(File buildDir, File jar) {

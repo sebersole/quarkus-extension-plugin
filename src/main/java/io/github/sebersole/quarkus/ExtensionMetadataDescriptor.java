@@ -7,6 +7,8 @@ import javax.inject.Inject;
 import org.gradle.api.Project;
 import org.gradle.api.provider.ListProperty;
 import org.gradle.api.provider.Property;
+import org.gradle.api.tasks.Input;
+import org.gradle.api.tasks.Internal;
 
 /**
  * @author Steve Ebersole
@@ -32,10 +34,13 @@ public abstract class ExtensionMetadataDescriptor {
 		keywords.convention( project.provider( ArrayList::new ) );
 	}
 
+	@Input
 	public Property<String> getStatusProperty() {
 		return status;
 	}
 
+	@Internal
+	@SuppressWarnings("unused")
 	public String getStatus() {
 		return getStatusProperty().getOrNull();
 	}
@@ -44,14 +49,18 @@ public abstract class ExtensionMetadataDescriptor {
 		getStatusProperty().set( status );
 	}
 
+	@SuppressWarnings("unused")
 	public void status(String status) {
 		setStatus( status );
 	}
 
+	@Input
 	public Property<String> getGuideProperty() {
 		return guide;
 	}
 
+	@Internal
+	@SuppressWarnings("unused")
 	public String getGuide() {
 		return getGuideProperty().getOrNull();
 	}
@@ -60,30 +69,39 @@ public abstract class ExtensionMetadataDescriptor {
 		getGuideProperty().set( guide );
 	}
 
+	@SuppressWarnings("unused")
 	public void guide(String guide) {
 		setGuide( guide );
 	}
 
+	@Input
 	public ListProperty<String> getCategoriesProperty() {
 		return categories;
 	}
 
+	@Internal
+	@SuppressWarnings("unused")
 	public List<String> getCategories() {
 		return getCategoriesProperty().get();
 	}
 
+	@SuppressWarnings("unused")
 	public void setCategories(List<String> categories) {
 		getCategoriesProperty().set( categories );
 	}
 
+	@Input
 	public ListProperty<String> getKeywordsProperty() {
 		return keywords;
 	}
 
+	@Internal
+	@SuppressWarnings("unused")
 	public List<String> getKeywords() {
 		return getKeywordsProperty().get();
 	}
 
+	@SuppressWarnings("unused")
 	public void setKeywords(List<String> keywords) {
 		getKeywordsProperty().set( keywords );
 	}

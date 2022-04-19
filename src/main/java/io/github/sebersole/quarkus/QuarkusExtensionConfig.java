@@ -54,6 +54,7 @@ public abstract class QuarkusExtensionConfig implements ExtensionAware  {
 		return quarkusVersionProperty.get();
 	}
 
+	@SuppressWarnings("unused")
 	public void setQuarkusVersion(String version) {
 		quarkusVersionProperty.set( version );
 	}
@@ -62,10 +63,12 @@ public abstract class QuarkusExtensionConfig implements ExtensionAware  {
 		return quarkusVersionProperty;
 	}
 
+	@SuppressWarnings("unused")
 	public boolean shouldApplyUniversePlatform() {
 		return applyUniversePlatformProperty.getOrElse( false );
 	}
 
+	@SuppressWarnings("unused")
 	public void applyUniversePlatform(boolean apply) {
 		setApplyUniversePlatform( apply );
 	}
@@ -78,14 +81,17 @@ public abstract class QuarkusExtensionConfig implements ExtensionAware  {
 		return applyUniversePlatformProperty;
 	}
 
+	@SuppressWarnings("unused")
 	public Property<Project> getDeploymentProjectProperty() {
 		return deploymentProjectProperty;
 	}
 
+	@SuppressWarnings("unused")
 	public Property<Project> getRuntimeProjectProperty() {
 		return runtimeProjectProperty;
 	}
 
+	@SuppressWarnings("unused")
 	public Property<Project> getSpiProjectProperty() {
 		return spiProjectProperty;
 	}
@@ -94,10 +100,12 @@ public abstract class QuarkusExtensionConfig implements ExtensionAware  {
 		return extensionDescriptor;
 	}
 
-	public void descriptor(Closure config) {
+	@SuppressWarnings("unused")
+	public void descriptor(Closure<ExtensionDescriptor> config) {
 		project.configure( extensionDescriptor, config );
 	}
 
+	@SuppressWarnings("unused")
 	public void descriptor(Action<ExtensionDescriptor> config) {
 		config.execute( extensionDescriptor );
 	}

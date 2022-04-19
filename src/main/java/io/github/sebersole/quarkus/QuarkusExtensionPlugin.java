@@ -23,6 +23,7 @@ import org.gradle.jvm.tasks.Jar;
 
 import io.github.sebersole.quarkus.tasks.GenerateBuildStepsList;
 import io.github.sebersole.quarkus.tasks.GenerateConfigRootsList;
+import io.github.sebersole.quarkus.tasks.GenerateDescriptor;
 import io.github.sebersole.quarkus.tasks.GenerateExtensionPropertiesFile;
 import io.github.sebersole.quarkus.tasks.IndexManager;
 import io.github.sebersole.quarkus.tasks.IndexerTask;
@@ -43,7 +44,6 @@ public class QuarkusExtensionPlugin implements Plugin<Project> {
 	@Override
 	public void apply(Project project) {
 		project.getPluginManager().apply( JavaLibraryPlugin.class );
-		//project.getPluginManager().apply( PublishingPlugin.class );
 		project.getPluginManager().apply( MavenPublishPlugin.class );
 
 		final QuarkusExtensionConfig config = project.getExtensions().create(
@@ -87,10 +87,7 @@ public class QuarkusExtensionPlugin implements Plugin<Project> {
 		final SourceSetContainer sourceSets = project.getExtensions().getByType( SourceSetContainer.class );
 		final SourceSet mainSourceSet = sourceSets.getByName( "main" );
 
-		project.getDependencies().add(
-				"implementation",
-				quarkusCore( project )
-		);
+		project.getDependencies().add( "implementation", quarkusCore( project ) );
 
 		final PublishingExtension publishingExtension = project.getExtensions().getByType( PublishingExtension.class );
 		final PublicationContainer publications = publishingExtension.getPublications();
@@ -108,25 +105,29 @@ public class QuarkusExtensionPlugin implements Plugin<Project> {
 				indexManager
 		);
 
+		final GenerateDescriptor generateDescriptorTask = project.getTasks().create(
+				GenerateDescriptor.TASK_NAME,
+				GenerateDescriptor.class,
+				config
+		);
+		runtimeJarTask.from( generateDescriptorTask.getDescriptorFileReference(), (copySpec) -> copySpec.into( "META-INF" ) );
+
 		final GenerateConfigRootsList configRootsTask = project.getTasks().create(
 				GenerateConfigRootsList.TASK_NAME,
 				GenerateConfigRootsList.class,
 				indexManager
 		);
-		runtimeJarTask.from( configRootsTask.getListFileReference(), (copySpec) -> {
-			copySpec.into( "META-INF" );
-		} );
+		runtimeJarTask.from( configRootsTask.getListFileReference(), (copySpec) -> copySpec.into( "META-INF" ) );
 
 		final GenerateExtensionPropertiesFile extensionPropertiesTask = project.getTasks().create(
 				GenerateExtensionPropertiesFile.TASK_NAME,
 				GenerateExtensionPropertiesFile.class
 		);
-		runtimeJarTask.from( extensionPropertiesTask.getPropertiesFile(), (copySpec) -> {
-			copySpec.into( "META-INF" );
-		} );
+		runtimeJarTask.from( extensionPropertiesTask.getPropertiesFile(), (copySpec) -> copySpec.into( "META-INF" ) );
 
 		indexerTask.dependsOn( mainSourceSet.getCompileJavaTaskName() );
 		configRootsTask.dependsOn( indexerTask );
+		runtimeJarTask.dependsOn( generateDescriptorTask );
 		runtimeJarTask.dependsOn( configRootsTask );
 		runtimeJarTask.dependsOn( extensionPropertiesTask );
 	}
@@ -173,9 +174,7 @@ public class QuarkusExtensionPlugin implements Plugin<Project> {
 				GenerateBuildStepsList.class,
 				indexManager
 		);
-		deploymentJarTask.from( buildStepsListTask.getListFileReference(), (copySpec) -> {
-			copySpec.into( "META-INF" );
-		} );
+		deploymentJarTask.from( buildStepsListTask.getListFileReference(), (copySpec) -> copySpec.into( "META-INF" ) );
 
 		indexerTask.dependsOn( deploymentSourceSet.getCompileJavaTaskName() );
 		buildStepsListTask.dependsOn( indexerTask );
