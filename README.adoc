@@ -26,6 +26,27 @@ Applying the plugin has the following effects:
 [[layout]]
 == Project Layout (SourceSets and Configurations)
 
+=== SourceSet Convention
+
+The "conventional" project layout is -
+
+```
+src/
+  deployment/
+    java/
+    resources/
+  main/
+    java/
+    resources/
+  spi/
+    java/
+    resources/
+  test/
+    java/
+    resources/
+```
+
+
 === Platforms
 
 The plugin creates a Gradle Configuration named `quarkusPlatforms` which is used to apply platform BOM files as
@@ -106,8 +127,8 @@ We have the following configurable Dependency Configurations:
 
 NOTE::At the moment, only Maven publishing is supported.
 
-The plugin creates a number of `MavenPublication` references.
-
+The plugin creates a number of `MavenPublication` references, each published with
+its javadoc and sources:
 
 runtime::`MavenPublication` related to the `main` source-set.
 deployment::(if one) `MavenPublication` related to the `deployment` source-set.
@@ -115,18 +136,13 @@ spi::(if one) `MavenPublication` related to the `spi` source-set.
 
 Assuming a project named `confungulator-quarkus`:
 
-runtime::The artifact-id would be `confungulator-quarkus`.
-deployment::The artifact-id would be `confungulator-quarkus-deployment`.
-spi::The artifact-id would be `confungulator-quarkus-spi`.
-
-Long story short, this translates 3 different Maven GAV (group-artifact-version) coordinates:
-
-* `io.github.sebersole.quarkus:confungulator-quarkus:${version}`
-* `io.github.sebersole.quarkus:confungulator-quarkus-deployment:${version}`
-* `io.github.sebersole.quarkus:confungulator-quarkus-spi:${version}`
+runtime::`io.github.sebersole.quarkus:confungulator-quarkus:${version}`
+deployment::`io.github.sebersole.quarkus:confungulator-quarkus-deployment:${version}`
+spi::`io.github.sebersole.quarkus:confungulator-quarkus-spi:${version}`
 
 
-Extension builds would need to define `MavenRepository` definition with the `PublishingExtension`.  E.g.
+Extension builds would need to specify the `MavenRepository` to which the publications
+should be published.  E.g.
 
 [source]
 ----
@@ -139,8 +155,9 @@ publishing {
 }
 ----
 
-See the https://docs.gradle.org/current/userguide/publishing_maven.html[documentation] for the Gradle
-`maven-publish` plugin for more information.
+See the Gradle `maven-publish` plugin
+https://docs.gradle.org/current/userguide/publishing_maven.html[documentation]
+for more information.
 
 
 [[configure]]

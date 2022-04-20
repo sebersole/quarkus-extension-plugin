@@ -1,0 +1,45 @@
+plugins {
+    id 'io.github.sebersole.quarkus-extension'
+}
+
+repositories {
+    mavenCentral()
+}
+
+group = 'io.github.sebersole.quarkus'
+version = '1.0-SNAPSHOT'
+description = "Quarkus extension for testing this Gradle extension plugin (publishing)"
+
+dependencies {
+//    quarkusPlatforms enforcedPlatform( 'io.quarkus:quarkus-bom:2.8.0.Final' )
+    quarkusPlatforms platform( 'io.quarkus:quarkus-bom:2.8.0.Final' )
+
+    testImplementation 'org.junit.jupiter:junit-jupiter-api:5.8.1'
+    testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.8.1'
+}
+
+java {
+    withJavadocJar()
+    withSourcesJar()
+}
+
+quarkusExtension {
+    name = "Published Extension"
+    description = "Simple extension used for testing publishing"
+
+    status = "stable"
+    guide = "https://hibernate.org"
+    category "publishing", "published"
+    keyword "publish", "publishing"
+}
+
+
+publishing {
+    repositories {
+        maven {
+            name = "testing"
+            url = project.layout.buildDirectory.dir( 'test-publishing' )
+        }
+    }
+}
+
