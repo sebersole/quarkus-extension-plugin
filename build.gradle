@@ -1,13 +1,13 @@
 plugins {
     id 'java-gradle-plugin'
-    id 'com.gradle.plugin-publish' version '0.20.0'
+    id 'com.gradle.plugin-publish' version '0.21.0'
 
     // for local publishing (local plugin testing)
     id 'maven-publish'
 }
 
 group 'io.github.sebersole.quarkus'
-version '0.9.0-SNAPSHOT'
+version '0.9.0'
 
 repositories {
     mavenCentral()
@@ -43,6 +43,7 @@ gradlePlugin {
 pluginBundle {
     website = "https://github.com/hibernate/hibernate-orm/tree/main/tooling/hibernate-gradle-plugin"
     vcsUrl = "https://github.com/hibernate/hibernate-orm/tree/main/tooling/hibernate-gradle-plugin"
+    tags = [ "quarkus" ]
 
     // sigh
     mavenCoordinates {
@@ -54,6 +55,7 @@ pluginBundle {
     plugins.getByName( pluginKey ) {
         id = pluginId
         displayName = "Gradle plugin for building Quarkus extensions"
+        description = 'Simplified support for building Quarkus extensions using Gradle'
     }
 }
 

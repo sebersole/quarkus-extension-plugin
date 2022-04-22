@@ -16,11 +16,10 @@ plugins {
 Applying the plugin has the following effects:
 
 * Applies the `java-library` plugin.
-* Applies the `maven-publish` pluginfootnote:[At the moment, only Maven publishing is supported; support for Ivy is planned as well.].
-* Enables publishing of the project's Javadoc and sources.
+* Applies the `maven-publish` pluginfootnote:[At the moment, only Maven publishing is supported].
 * Prepares the different SourceSets and Configurations - see <<layout>>.
 * Applies a DSL extension - see <<configure>>.
-* Prepares the publications - see <<publications>>.
+* Prepares the publications - see <<publications>>
 
 
 [[layout]]
