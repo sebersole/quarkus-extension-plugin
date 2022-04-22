@@ -261,6 +261,7 @@ public class QuarkusExtensionPlugin implements Plugin<Project> {
 		final Jar mainJarTask = (Jar) taskContainer.getByName( mainSourceSet.getJarTaskName() );
 
 		final Jar jarTask = taskContainer.create( sourceSet.getJarTaskName(), Jar.class, (task) -> {
+			task.setGroup( "build" );
 			task.setDescription( "Creates the " + publicationName + " artifact" );
 			task.dependsOn( taskContainer.getByName( sourceSet.getCompileJavaTaskName() ) );
 
@@ -275,6 +276,7 @@ public class QuarkusExtensionPlugin implements Plugin<Project> {
 		final Provider<Directory> javadocDir = project.getLayout().getBuildDirectory().dir( "docs/javadoc-" + publicationName );
 
 		final Javadoc javadocTask = taskContainer.create( sourceSet.getJavadocTaskName(), Javadoc.class, (task) -> {
+			task.setGroup( "documentation" );
 			task.setDescription( "Generates the deployment Javadocs" );
 			task.dependsOn( sourceSet.getCompileJavaTaskName(), sourceSet.getProcessResourcesTaskName() );
 
@@ -283,30 +285,35 @@ public class QuarkusExtensionPlugin implements Plugin<Project> {
 			task.setDestinationDir( javadocDir.get().getAsFile() );
 		} );
 
-		final Jar javadocJarTask = taskContainer.create( sourceSet.getJavadocJarTaskName(), Jar.class );
-		javadocJarTask.setDescription( "Creates the " + publicationName + " Javadoc artifact" );
-		javadocJarTask.dependsOn( javadocTask );
+		final Jar javadocJarTask = taskContainer.create( sourceSet.getJavadocJarTaskName(), Jar.class, (task) -> {
+			task.setGroup( "build" );
+			task.setDescription( "Creates the " + publicationName + " Javadoc artifact" );
+			task.dependsOn( javadocTask );
 
-		javadocJarTask.getArchiveBaseName().set( mainJarTask.getArchiveBaseName() );
-		javadocJarTask.getArchiveAppendix().set( publicationName );
-		javadocJarTask.getArchiveClassifier().set( "javadoc" );
-		javadocJarTask.getArchiveVersion().set( project.provider( () -> project.getVersion().toString() ) );
+			task.getArchiveBaseName().set( mainJarTask.getArchiveBaseName() );
+			task.getArchiveAppendix().set( publicationName );
+			task.getArchiveClassifier().set( "javadoc" );
+			task.getArchiveVersion().set( project.provider( () -> project.getVersion().toString() ) );
 
-		javadocJarTask.from( javadocDir );
-		javadocJarTask.getDestinationDirectory().set( mainJarTask.getDestinationDirectory() );
+			task.from( javadocDir );
+			task.getDestinationDirectory().set( mainJarTask.getDestinationDirectory() );
+		} );
 
-		final Jar sourcesJarTask = taskContainer.create( sourceSet.getSourcesJarTaskName(), Jar.class );
-		sourcesJarTask.setDescription( "Creates the " + publicationName + " sources artifact" );
+		final Jar sourcesJarTask = taskContainer.create( sourceSet.getSourcesJarTaskName(), Jar.class, (task) -> {
+			task.setGroup( "build" );
+			task.setDescription( "Creates the " + publicationName + " sources artifact" );
 
-		sourcesJarTask.getArchiveBaseName().set( mainJarTask.getArchiveBaseName() );
-		sourcesJarTask.getArchiveAppendix().set( publicationName );
-		sourcesJarTask.getArchiveClassifier().set( "sources" );
-		sourcesJarTask.getArchiveVersion().set( project.provider( () -> project.getVersion().toString() ) );
+			task.getArchiveBaseName().set( mainJarTask.getArchiveBaseName() );
+			task.getArchiveAppendix().set( publicationName );
+			task.getArchiveClassifier().set( "sources" );
+			task.getArchiveVersion().set( project.provider( () -> project.getVersion().toString() ) );
 
-		sourcesJarTask.from( sourceSet.getAllSource() );
-		sourcesJarTask.getDestinationDirectory().set( mainJarTask.getDestinationDirectory() );
+			task.from( sourceSet.getAllSource() );
+			task.getDestinationDirectory().set( mainJarTask.getDestinationDirectory() );
+		} );
 
 		final Task buildTask = taskContainer.getByName( "build" );
+		buildTask.dependsOn( jarTask );
 		buildTask.dependsOn( javadocJarTask );
 		buildTask.dependsOn( sourcesJarTask );
 
