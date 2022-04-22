@@ -183,6 +183,7 @@ public class QuarkusExtensionPlugin implements Plugin<Project> {
 		);
 
 		runtimeJarTask.finalizedBy( verificationTask );
+
 		// can't remember if check includes jar. easy enough to just add it both places, so...
 		project.getTasks().getByName( "check" ).dependsOn( verificationTask );
 	}
