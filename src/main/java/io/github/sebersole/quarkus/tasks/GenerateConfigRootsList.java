@@ -41,7 +41,7 @@ public abstract class GenerateConfigRootsList extends DefaultTask {
 	public GenerateConfigRootsList(IndexManager indexManager) {
 		this.indexManager = indexManager;
 
-		setGroup( Names.QUARKUS_GROUP );
+		setGroup( Names.TASK_GROUP );
 		setDescription( "Generates the `quarkus-config-roots.list` file ultimately bundled into the extension runtime artifact" );
 
 		listFile = getProject().getObjects().fileProperty();

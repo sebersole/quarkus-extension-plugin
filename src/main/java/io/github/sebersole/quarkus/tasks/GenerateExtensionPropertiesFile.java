@@ -23,7 +23,7 @@ public abstract class GenerateExtensionPropertiesFile extends DefaultTask {
 	private final RegularFileProperty propertiesFile;
 
 	public GenerateExtensionPropertiesFile() {
-		setGroup( Names.QUARKUS_GROUP );
+		setGroup( Names.TASK_GROUP );
 		setDescription( "Generates the `quarkus-extension.properties` file ultimately bundled into the extension runtime artifact" );
 
 		propertiesFile = getProject().getObjects().fileProperty();

@@ -1,0 +1,35 @@
+plugins {
+    id 'io.github.sebersole.quarkus-extension'
+}
+
+repositories {
+    mavenCentral()
+}
+
+group = 'io.github.sebersole.quarkus'
+version = '1.0-SNAPSHOT'
+
+dependencies {
+    quarkusPlatforms platform( 'io.quarkus:quarkus-bom:2.8.0.Final' )
+
+    // this should cause problems
+    implementation 'io.quarkus:quarkus-agroal-deployment'
+
+    testImplementation 'org.junit.jupiter:junit-jupiter-api:5.8.1'
+    testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.8.1'
+}
+
+java {
+    withJavadocJar()
+    withSourcesJar()
+}
+
+quarkusExtension {
+    name = "Bad deps sample extension"
+    description = "Quarkus extension for testing validation that extensions do not define deployment dependency as part of the runtime classpath "
+
+    status = "stable"
+    guide = "https://hibernate.org"
+    category "sample"
+    keyword "gradle", "sample", "bad-dependencies"
+}

@@ -44,7 +44,7 @@ public abstract class GenerateBuildStepsList extends DefaultTask {
 	public GenerateBuildStepsList(IndexManager indexManager) {
 		this.indexManager = indexManager;
 
-		setGroup( Names.QUARKUS_GROUP );
+		setGroup( Names.TASK_GROUP );
 		setDescription( "Generates the `quarkus-build-steps.list` file ultimately bundled into the extension deployment artifact" );
 
 		listFile = getProject().getObjects().fileProperty();

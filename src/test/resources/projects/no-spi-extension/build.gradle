@@ -1,0 +1,32 @@
+plugins {
+    id 'io.github.sebersole.quarkus-extension'
+}
+
+repositories {
+    mavenCentral()
+}
+
+group = 'io.github.sebersole.quarkus'
+version = '1.0-SNAPSHOT'
+
+dependencies {
+    quarkusPlatforms platform( 'io.quarkus:quarkus-bom:2.8.0.Final' )
+
+    testImplementation 'org.junit.jupiter:junit-jupiter-api:5.8.1'
+    testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.8.1'
+}
+
+java {
+    withJavadocJar()
+    withSourcesJar()
+}
+
+quarkusExtension {
+    name = "No-SPI Quarkus extension"
+    description = "Quarkus extension for testing that extensions with no SPI work"
+
+    status = "stable"
+    guide = "https://hibernate.org"
+    category "sample"
+    keyword "gradle", "sample", "no-spi"
+}

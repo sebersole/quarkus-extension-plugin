@@ -1,0 +1,17 @@
+package io.github.sebersole.quarkus;
+
+/**
+ * Indicates a validation of the extension has failed.  The message will have
+ * the details.
+ *
+ * @author Steve Ebersole
+ */
+public class ValidationException extends RuntimeException {
+	public ValidationException(String message) {
+		super( message );
+	}
+
+	public ValidationException(String message, Throwable cause) {
+		super( message, cause );
+	}
+}

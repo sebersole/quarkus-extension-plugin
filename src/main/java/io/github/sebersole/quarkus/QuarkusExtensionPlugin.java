@@ -43,7 +43,6 @@ import org.gradle.api.model.ObjectFactory;
 import org.gradle.api.plugins.JavaLibraryPlugin;
 import org.gradle.api.plugins.JavaPluginExtension;
 import org.gradle.api.provider.Provider;
-import org.gradle.api.publish.Publication;
 import org.gradle.api.publish.PublicationContainer;
 import org.gradle.api.publish.PublishingExtension;
 import org.gradle.api.publish.maven.MavenPom;
@@ -63,6 +62,7 @@ import io.github.sebersole.quarkus.tasks.GenerateDescriptor;
 import io.github.sebersole.quarkus.tasks.GenerateExtensionPropertiesFile;
 import io.github.sebersole.quarkus.tasks.IndexManager;
 import io.github.sebersole.quarkus.tasks.IndexerTask;
+import io.github.sebersole.quarkus.tasks.VerifyDependenciesTask;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 import org.w3c.dom.Node;
@@ -104,14 +104,19 @@ public class QuarkusExtensionPlugin implements Plugin<Project> {
 		javaPluginExtension.withSourcesJar();
 
 		preparePlatforms( project );
+
 		prepareRuntime( config, project );
 		prepareDeployment( project );
 		prepareSpi( project );
 
-		prepareAdjustments( project );
+		applyAdjustments( project );
 	}
 
 
+	/**
+	 * Prepares the {@value Names#PLATFORMS_CONFIG_NAME} Configuration and
+	 * applies it to all Configurations (other than itself ofc)
+	 */
 	private void preparePlatforms(Project project) {
 		final Configuration platforms = project.getConfigurations().maybeCreate( Names.PLATFORMS_CONFIG_NAME );
 		platforms.setDescription( "Configuration to specify all Quarkus platforms (BOMs) to be applied" );
@@ -170,6 +175,16 @@ public class QuarkusExtensionPlugin implements Plugin<Project> {
 		runtimeJarTask.dependsOn( generateDescriptorTask );
 		runtimeJarTask.dependsOn( configRootsTask );
 		runtimeJarTask.dependsOn( extensionPropertiesTask );
+
+		final VerifyDependenciesTask verificationTask = project.getTasks().create(
+				VerifyDependenciesTask.TASK_NAME,
+				VerifyDependenciesTask.class,
+				config
+		);
+
+		runtimeJarTask.finalizedBy( verificationTask );
+		// can't remember if check includes jar. easy enough to just add it both places, so...
+		project.getTasks().getByName( "check" ).dependsOn( verificationTask );
 	}
 
 	private void prepareDeployment(Project project) {
@@ -303,52 +318,42 @@ public class QuarkusExtensionPlugin implements Plugin<Project> {
 			to.getInceptionYear().set( from.getInceptionYear() );
 			to.getUrl().set( from.getUrl() );
 
-			from.ciManagement( (fromCiManagement) -> {
-				to.ciManagement( (toCiManagement) -> {
-					toCiManagement.getUrl().set( fromCiManagement.getUrl() );
-					toCiManagement.getSystem().set( fromCiManagement.getSystem() );
-				} );
-			} );
+			from.ciManagement( (fromCiManagement) -> to.ciManagement( (toCiManagement) -> {
+				// for CI details listed in the main pom
+				toCiManagement.getUrl().set( fromCiManagement.getUrl() );
+				toCiManagement.getSystem().set( fromCiManagement.getSystem() );
+			} ) );
 
-			from.licenses( (fromLicenses) -> {
-				to.licenses( (toLicenses) -> {
-					fromLicenses.license( (fromLicense) -> {
-						toLicenses.license( (toLicense) -> {
-							toLicense.getName().set( fromLicense.getName() );
-							toLicense.getUrl().set( fromLicense.getUrl() );
-							toLicense.getComments().set( fromLicense.getComments() );
-							toLicense.getDistribution().set( fromLicense.getDistribution() );
-						} );
-					} );
+			from.licenses( (fromLicenses) -> to.licenses( (toLicenses) -> fromLicenses.license( (fromLicense) -> {
+				// for each license listed in the main pom
+				toLicenses.license( (toLicense) -> {
+					toLicense.getName().set( fromLicense.getName() );
+					toLicense.getUrl().set( fromLicense.getUrl() );
+					toLicense.getComments().set( fromLicense.getComments() );
+					toLicense.getDistribution().set( fromLicense.getDistribution() );
 				} );
-			} );
+			} ) ) );
 
-			from.scm( (fromScm) -> {
-				to.scm( (toScm) -> {
-					toScm.getUrl().set( fromScm.getUrl() );
-					toScm.getConnection().set( fromScm.getConnection() );
-					toScm.getDeveloperConnection().set( fromScm.getDeveloperConnection() );
-					toScm.getTag().set( fromScm.getTag() );
-				} );
-			} );
+			from.scm( (fromScm) -> to.scm( (toScm) -> {
+				// for scm details in the main pom
+				toScm.getUrl().set( fromScm.getUrl() );
+				toScm.getConnection().set( fromScm.getConnection() );
+				toScm.getDeveloperConnection().set( fromScm.getDeveloperConnection() );
+				toScm.getTag().set( fromScm.getTag() );
+			} ) );
 
-			from.developers( (fromDevelopers) -> {
-				to.developers( (toDevelopers) -> {
-					fromDevelopers.developer( (fromDev) -> {
-						toDevelopers.developer( (toDev) -> {
-							toDev.getId().set( fromDev.getId() );
-							toDev.getName().set( fromDev.getName() );
-							toDev.getEmail().set( fromDev.getEmail() );
-							toDev.getUrl().set( fromDev.getUrl() );
-							toDev.getOrganization().set( fromDev.getOrganization() );
-							toDev.getOrganizationUrl().set( fromDev.getOrganizationUrl() );
-							toDev.getTimezone().set( fromDev.getTimezone() );
-							toDev.getProperties().set( fromDev.getProperties() );
-							toDev.getRoles().set( fromDev.getRoles() );
-						} );
-					} );
-				} );
-			} );
+			from.developers( (fromDevelopers) -> to.developers( (toDevelopers) -> fromDevelopers.developer( (fromDev) -> toDevelopers.developer( (toDev) -> {
+				// for each developer listed in the main pom
+				toDev.getId().set( fromDev.getId() );
+				toDev.getName().set( fromDev.getName() );
+				toDev.getEmail().set( fromDev.getEmail() );
+				toDev.getUrl().set( fromDev.getUrl() );
+				toDev.getOrganization().set( fromDev.getOrganization() );
+				toDev.getOrganizationUrl().set( fromDev.getOrganizationUrl() );
+				toDev.getTimezone().set( fromDev.getTimezone() );
+				toDev.getProperties().set( fromDev.getProperties() );
+				toDev.getRoles().set( fromDev.getRoles() );
+			} ) ) ) );
 		} );
 	}
 
@@ -450,7 +455,7 @@ public class QuarkusExtensionPlugin implements Plugin<Project> {
 	 * 	- the deployment Gradle module descriptor to adjust `deploymentApiElements`, etc
 	 * 	- the spi Gradle module descriptor to adjust `spiApiElements`, etc
 	 */
-	private void prepareAdjustments(Project project) {
+	private void applyAdjustments(Project project) {
 		final TaskContainer taskContainer = project.getTasks();
 		taskContainer.all( (task) -> {
 			if ( task.getName().equals( "generatePomFileForRuntimePublication" ) ) {
