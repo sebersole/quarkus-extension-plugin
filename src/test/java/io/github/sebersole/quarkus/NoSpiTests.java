@@ -19,7 +19,7 @@ import static org.gradle.testkit.runner.TaskOutcome.SUCCESS;
 public class NoSpiTests {
 
 	@Test
-	public void testBundle(@TempDir Path projectDir) {
+	public void testNoSpiModule(@TempDir Path projectDir) {
 		prepareProjectDir( projectDir );
 
 		final GradleRunner gradleRunner = GradleRunner.create()

@@ -4,6 +4,8 @@ import java.io.File;
 import java.io.IOException;
 import java.util.Locale;
 import java.util.Set;
+import java.util.jar.JarEntry;
+import java.util.jar.JarFile;
 import javax.inject.Inject;
 
 import org.gradle.api.DefaultTask;
@@ -33,6 +35,7 @@ import io.github.sebersole.quarkus.ValidationException;
 @CacheableTask
 public abstract class VerifyDependenciesTask extends DefaultTask {
 	public static final String TASK_NAME = "verifyQuarkusDependencies";
+	public static final String STEPS_LIST_RELATIVE_PATH = "META-INF/quarkus-build-steps.list";
 
 	private final Property<Configuration> runtimeDependencies;
 	private final Provider<RegularFile> output;
@@ -68,22 +71,22 @@ public abstract class VerifyDependenciesTask extends DefaultTask {
 		final ResolvedConfiguration resolvedRuntimeDependencies = runtimeDependencies.get().getResolvedConfiguration();
 		final Set<ResolvedArtifact> runtimeDependenciesArtifacts = resolvedRuntimeDependencies.getResolvedArtifacts();
 		getLogger().info( "Checking `{}` runtime dependencies", runtimeDependenciesArtifacts.size() );
+
 		for ( ResolvedArtifact resolvedRuntimeDependency : runtimeDependenciesArtifacts ) {
+			if ( !"jar".equals( resolvedRuntimeDependency.getExtension() ) ) {
+				continue;
+			}
+
 			final ResolvedModuleVersion dependencyModuleVersion = resolvedRuntimeDependency.getModuleVersion();
-			final String dependencyArtifactId = dependencyModuleVersion.getId().getName();
+			getLogger().debug( "Checking runtime dependency - {}", dependencyModuleVersion.getId() );
 
-			// for the time being we just check the artifactId to make sure it does not end in `-deployment`
-			//
-			// a better option would be to check each artifact file(s) for a `META-INF/quarkus-build-steps.list`
-			// file, but not sure that that is a requirement for deployment artifacts
-
-			if ( dependencyArtifactId.endsWith( "-deployment" ) ) {
+			if ( hasBuildStepsList( resolvedRuntimeDependency.getFile() ) ) {
 				throw new ValidationException(
 						String.format(
 								Locale.ROOT,
 								"The extension's runtime classpath depends on a deployment artifact : `%s:%s:%s`",
 								dependencyModuleVersion.getId().getGroup(),
-								dependencyArtifactId,
+								dependencyModuleVersion.getId().getName(),
 								dependencyModuleVersion.getId().getVersion()
 						)
 				);
@@ -107,5 +110,20 @@ public abstract class VerifyDependenciesTask extends DefaultTask {
 		catch (IOException e) {
 			getProject().getLogger().warn( "Unable to create output file", e );
 		}
+	}
+
+	private boolean hasBuildStepsList(File file) {
+		try {
+			final JarFile jarFile = new JarFile( file );
+			return hasBuildStepsList( jarFile );
+		}
+		catch (IOException e) {
+			throw new RuntimeException( "Unable to treat file as JarFile - " + file.getAbsolutePath(), e );
+		}
+	}
+
+	private boolean hasBuildStepsList(JarFile jarFile) {
+		final JarEntry jarEntry = jarFile.getJarEntry( STEPS_LIST_RELATIVE_PATH );
+		return jarEntry != null;
 	}
 }

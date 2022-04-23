@@ -17,7 +17,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 public class BasicUpToDateCheckTest {
 	@Test
-	public void testBuild(@TempDir Path projectDir) {
+	public void testUpToDateHandling(@TempDir Path projectDir) {
 		Copier.copyProject( "basic-extension/build.gradle", projectDir );
 
 		// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

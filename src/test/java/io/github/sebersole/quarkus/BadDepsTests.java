@@ -20,7 +20,7 @@ import static org.junit.jupiter.api.Assertions.fail;
 public class BadDepsTests {
 
 	@Test
-	public void testBundle(@TempDir Path projectDir) {
+	public void testRuntimeDependencyOnDeploymentArtifactFails(@TempDir Path projectDir) {
 		prepareProjectDir( projectDir );
 
 		final GradleRunner gradleRunner = GradleRunner.create()
