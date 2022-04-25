@@ -68,6 +68,7 @@ public abstract class VerifyDependenciesTask extends DefaultTask {
 				getProject().provider( () -> {
 					final SourceSet deploymentSourceSet = sourceSets.getByName( "deployment" );
 					return configurations.getByName( deploymentSourceSet.getRuntimeClasspathConfigurationName() );
+//					return configurations.getByName( deploymentSourceSet.getRuntimeElementsConfigurationName() );
 				} )
 		);
 
@@ -168,15 +169,22 @@ public abstract class VerifyDependenciesTask extends DefaultTask {
 
 	private void verifyDeploymentDependencies(Set<String> runtimeArtifactCoordinates) {
 		final ResolvedConfiguration resolvedDeploymentDependencies = deploymentDependencies.get().getResolvedConfiguration();
+		final Set<String> deploymentArtifactCoordinates = new HashSet<>();
 		resolvedDeploymentDependencies.getResolvedArtifacts().forEach( (artifact) -> {
-			final ModuleVersionIdentifier moduleId = artifact.getModuleVersion().getId();
-			runtimeArtifactCoordinates.remove( groupArtifact( moduleId.getGroup(), moduleId.getName() ) );
+			withJarFile( artifact.getFile(), (jarFile) -> {
+				if ( hasExtensionProperties( jarFile ) ) {
+					final ModuleVersionIdentifier moduleId = artifact.getModuleVersion().getId();
+					deploymentArtifactCoordinates.add( groupArtifact( moduleId.getGroup(), moduleId.getName() ) );
+				}
+			} );
 		} );
 
-		if ( ! runtimeArtifactCoordinates.isEmpty() ) {
+		deploymentArtifactCoordinates.removeAll( runtimeArtifactCoordinates );
+
+		if ( ! deploymentArtifactCoordinates.isEmpty() ) {
 			final StringBuilder buffer = new StringBuilder( "The dependency classpath defined dependencies on the following extension runtime artifacts : [" );
 
-			runtimeArtifactCoordinates.forEach( (gav) -> {
+			deploymentArtifactCoordinates.forEach( (gav) -> {
 				buffer.append( gav ).append( ", " );
 			} );
 
