@@ -237,12 +237,16 @@ public class QuarkusExtensionPlugin implements Plugin<Project> {
 	}
 
 	private void preparePublication(SourceSet sourceSet, Project project) {
+		// e.g., `deployment` or `spi`
 		final String publicationName = sourceSet.getName();
 
 		final PublishingExtension publishingExtension = project.getExtensions().getByType( PublishingExtension.class );
 		final MavenPublication publication = publishingExtension.getPublications().create( publicationName, MavenPublication.class );
+		// `confungulator-deployment` or `confungulator-spi`
 		publication.setArtifactId( publication.getArtifactId() + "-" + publicationName );
 
+		// transfer any of the standard POM details defined on the `main`
+		// artifact to the publication we are preparing
 		transferBasicPomDetails(
 				// from
 				( (MavenPublication) publishingExtension.getPublications().getByName( "runtime" ) ).getPom(),
@@ -251,6 +255,7 @@ public class QuarkusExtensionPlugin implements Plugin<Project> {
 				project
 		);
 
+		// generate the extension component
 		final AdhocComponentWithVariants publicationComponent = softwareComponentFactory.adhoc( publicationName );
 		project.getComponents().add( publicationComponent );
 		publication.from( publicationComponent );
@@ -318,6 +323,7 @@ public class QuarkusExtensionPlugin implements Plugin<Project> {
 		buildTask.dependsOn( javadocJarTask );
 		buildTask.dependsOn( sourcesJarTask );
 
+		// create the main, javadoc and sources variants
 		applyModuleVariants( sourceSet, project, publicationComponent, jarTask, javadocJarTask, sourcesJarTask );
 	}
 

@@ -2,8 +2,10 @@ package io.github.sebersole.quarkus.tasks;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.HashSet;
 import java.util.Locale;
 import java.util.Set;
+import java.util.function.Consumer;
 import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
 import javax.inject.Inject;
@@ -11,6 +13,7 @@ import javax.inject.Inject;
 import org.gradle.api.DefaultTask;
 import org.gradle.api.artifacts.Configuration;
 import org.gradle.api.artifacts.ConfigurationContainer;
+import org.gradle.api.artifacts.ModuleVersionIdentifier;
 import org.gradle.api.artifacts.ResolvedArtifact;
 import org.gradle.api.artifacts.ResolvedConfiguration;
 import org.gradle.api.artifacts.ResolvedModuleVersion;
@@ -29,6 +32,8 @@ import io.github.sebersole.quarkus.ExtensionDescriptor;
 import io.github.sebersole.quarkus.Names;
 import io.github.sebersole.quarkus.ValidationException;
 
+import static io.github.sebersole.quarkus.QuarkusExtensionPlugin.groupArtifact;
+
 /**
  * @author Steve Ebersole
  */
@@ -36,22 +41,35 @@ import io.github.sebersole.quarkus.ValidationException;
 public abstract class VerifyDependenciesTask extends DefaultTask {
 	public static final String TASK_NAME = "verifyQuarkusDependencies";
 	public static final String STEPS_LIST_RELATIVE_PATH = "META-INF/quarkus-build-steps.list";
+	public static final String EXTENSION_PROPERTIES_RELATIVE_PATH = "META-INF/quarkus-extension.properties";
 
 	private final Property<Configuration> runtimeDependencies;
+	private final Property<Configuration> deploymentDependencies;
 	private final Provider<RegularFile> output;
 
 	@Inject
-	public VerifyDependenciesTask(ExtensionDescriptor config) {
+	public VerifyDependenciesTask(@SuppressWarnings("unused") ExtensionDescriptor config) {
 		setGroup( Names.TASK_GROUP );
 		setDescription( "Verifies that the runtime artifact of the Quarkus extension pulls no deployment artifacts into its runtime-classpath" );
 
 		final JavaPluginExtension javaPluginExtension = getProject().getExtensions().getByType( JavaPluginExtension.class );
 		final SourceSetContainer sourceSets = javaPluginExtension.getSourceSets();
 		final SourceSet mainSourceSet = sourceSets.getByName( SourceSet.MAIN_SOURCE_SET_NAME );
+
 		final ConfigurationContainer configurations = getProject().getConfigurations();
 
 		runtimeDependencies = getProject().getObjects().property( Configuration.class );
-		runtimeDependencies.set( configurations.getByName( mainSourceSet.getRuntimeClasspathConfigurationName() ) );
+		runtimeDependencies.set(
+				getProject().provider( () -> configurations.getByName( mainSourceSet.getRuntimeClasspathConfigurationName() ) )
+		);
+
+		deploymentDependencies = getProject().getObjects().property( Configuration.class );
+		deploymentDependencies.set(
+				getProject().provider( () -> {
+					final SourceSet deploymentSourceSet = sourceSets.getByName( "deployment" );
+					return configurations.getByName( deploymentSourceSet.getRuntimeClasspathConfigurationName() );
+				} )
+		);
 
 		output = getProject().getLayout().getBuildDirectory().file( "tmp/verifyQuarkusDependencies.txt" );
 	}
@@ -68,30 +86,8 @@ public abstract class VerifyDependenciesTask extends DefaultTask {
 
 	@TaskAction
 	public void verifyDependencies() {
-		final ResolvedConfiguration resolvedRuntimeDependencies = runtimeDependencies.get().getResolvedConfiguration();
-		final Set<ResolvedArtifact> runtimeDependenciesArtifacts = resolvedRuntimeDependencies.getResolvedArtifacts();
-		getLogger().info( "Checking `{}` runtime dependencies", runtimeDependenciesArtifacts.size() );
-
-		for ( ResolvedArtifact resolvedRuntimeDependency : runtimeDependenciesArtifacts ) {
-			if ( !"jar".equals( resolvedRuntimeDependency.getExtension() ) ) {
-				continue;
-			}
-
-			final ResolvedModuleVersion dependencyModuleVersion = resolvedRuntimeDependency.getModuleVersion();
-			getLogger().debug( "Checking runtime dependency - {}", dependencyModuleVersion.getId() );
-
-			if ( hasBuildStepsList( resolvedRuntimeDependency.getFile() ) ) {
-				throw new ValidationException(
-						String.format(
-								Locale.ROOT,
-								"The extension's runtime classpath depends on a deployment artifact : `%s:%s:%s`",
-								dependencyModuleVersion.getId().getGroup(),
-								dependencyModuleVersion.getId().getName(),
-								dependencyModuleVersion.getId().getVersion()
-						)
-				);
-			}
-		}
+		final Set<String> runtimeArtifactCoordinates = verifyRuntimeDependencies();
+		verifyDeploymentDependencies( runtimeArtifactCoordinates );
 
 		final File outputAsFile = output.get().getAsFile();
 
@@ -112,10 +108,48 @@ public abstract class VerifyDependenciesTask extends DefaultTask {
 		}
 	}
 
-	private boolean hasBuildStepsList(File file) {
+	private Set<String> verifyRuntimeDependencies() {
+		final ResolvedConfiguration resolvedRuntimeDependencies = runtimeDependencies.get().getResolvedConfiguration();
+		final Set<ResolvedArtifact> runtimeDependenciesArtifacts = resolvedRuntimeDependencies.getResolvedArtifacts();
+		getLogger().info( "Checking `{}` runtime dependencies", runtimeDependenciesArtifacts.size() );
+
+		final Set<String> runtimeArtifactGavs = new HashSet<>();
+
+		for ( ResolvedArtifact resolvedRuntimeDependency : runtimeDependenciesArtifacts ) {
+			if ( !"jar".equals( resolvedRuntimeDependency.getExtension() ) ) {
+				continue;
+			}
+
+			final ResolvedModuleVersion dependencyModuleVersion = resolvedRuntimeDependency.getModuleVersion();
+			getLogger().debug( "Checking runtime dependency - {}", dependencyModuleVersion.getId() );
+
+			withJarFile( resolvedRuntimeDependency.getFile(), (jar) -> {
+				if ( hasBuildStepsList( jar ) ) {
+					throw new ValidationException(
+							String.format(
+									Locale.ROOT,
+									"The extension's runtime classpath depends on a deployment artifact : `%s:%s:%s`",
+									dependencyModuleVersion.getId().getGroup(),
+									dependencyModuleVersion.getId().getName(),
+									dependencyModuleVersion.getId().getVersion()
+							)
+					);
+				}
+
+				if ( hasExtensionProperties( jar ) ) {
+					final ModuleVersionIdentifier moduleId = resolvedRuntimeDependency.getModuleVersion().getId();
+					runtimeArtifactGavs.add( groupArtifact( moduleId.getGroup(), moduleId.getName() ) );
+				}
+			} );
+		}
+
+		return runtimeArtifactGavs;
+	}
+
+	private void withJarFile(File file, Consumer<JarFile> jarFileConsumer) {
 		try {
 			final JarFile jarFile = new JarFile( file );
-			return hasBuildStepsList( jarFile );
+			jarFileConsumer.accept( jarFile );
 		}
 		catch (IOException e) {
 			throw new RuntimeException( "Unable to treat file as JarFile - " + file.getAbsolutePath(), e );
@@ -125,5 +159,30 @@ public abstract class VerifyDependenciesTask extends DefaultTask {
 	private boolean hasBuildStepsList(JarFile jarFile) {
 		final JarEntry jarEntry = jarFile.getJarEntry( STEPS_LIST_RELATIVE_PATH );
 		return jarEntry != null;
+	}
+
+	private boolean hasExtensionProperties(JarFile jarFile) {
+		final JarEntry jarEntry = jarFile.getJarEntry( EXTENSION_PROPERTIES_RELATIVE_PATH );
+		return jarEntry != null;
+	}
+
+	private void verifyDeploymentDependencies(Set<String> runtimeArtifactCoordinates) {
+		final ResolvedConfiguration resolvedDeploymentDependencies = deploymentDependencies.get().getResolvedConfiguration();
+		resolvedDeploymentDependencies.getResolvedArtifacts().forEach( (artifact) -> {
+			final ModuleVersionIdentifier moduleId = artifact.getModuleVersion().getId();
+			runtimeArtifactCoordinates.remove( groupArtifact( moduleId.getGroup(), moduleId.getName() ) );
+		} );
+
+		if ( ! runtimeArtifactCoordinates.isEmpty() ) {
+			final StringBuilder buffer = new StringBuilder( "The dependency classpath defined dependencies on the following extension runtime artifacts : [" );
+
+			runtimeArtifactCoordinates.forEach( (gav) -> {
+				buffer.append( gav ).append( ", " );
+			} );
+
+			buffer.append( "]" );
+
+			throw new ValidationException( buffer.toString() );
+		}
 	}
 }
