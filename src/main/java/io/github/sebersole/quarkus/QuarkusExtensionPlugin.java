@@ -7,7 +7,6 @@ import java.io.IOException;
 import java.io.LineNumberReader;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 import javax.inject.Inject;
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
@@ -27,7 +26,6 @@ import org.gradle.api.Project;
 import org.gradle.api.Task;
 import org.gradle.api.artifacts.Configuration;
 import org.gradle.api.artifacts.ConfigurationPublications;
-import org.gradle.api.artifacts.Dependency;
 import org.gradle.api.attributes.Bundling;
 import org.gradle.api.attributes.Category;
 import org.gradle.api.attributes.DocsType;
@@ -56,13 +54,14 @@ import org.gradle.api.tasks.TaskContainer;
 import org.gradle.api.tasks.javadoc.Javadoc;
 import org.gradle.jvm.tasks.Jar;
 
+import io.github.sebersole.quarkus.tasks.VerifyRuntimeDependencies;
 import io.github.sebersole.quarkus.tasks.GenerateBuildStepsList;
 import io.github.sebersole.quarkus.tasks.GenerateConfigRootsList;
 import io.github.sebersole.quarkus.tasks.GenerateDescriptor;
 import io.github.sebersole.quarkus.tasks.GenerateExtensionPropertiesFile;
 import io.github.sebersole.quarkus.tasks.IndexManager;
 import io.github.sebersole.quarkus.tasks.IndexerTask;
-import io.github.sebersole.quarkus.tasks.VerifyDependenciesTask;
+import io.github.sebersole.quarkus.tasks.VerifyDeploymentDependencies;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 import org.w3c.dom.Node;
@@ -70,9 +69,6 @@ import org.w3c.dom.NodeList;
 import org.xml.sax.SAXException;
 
 import static io.github.sebersole.quarkus.Names.DSL_EXTENSION_NAME;
-import static io.github.sebersole.quarkus.Names.QUARKUS_CORE;
-import static io.github.sebersole.quarkus.Names.QUARKUS_CORE_DEPLOYMENT;
-import static io.github.sebersole.quarkus.Names.QUARKUS_GROUP;
 
 /**
  * Plugin for defining Quarkus extensions
@@ -132,7 +128,7 @@ public class QuarkusExtensionPlugin implements Plugin<Project> {
 		final SourceSetContainer sourceSets = project.getExtensions().getByType( SourceSetContainer.class );
 		final SourceSet mainSourceSet = sourceSets.getByName( "main" );
 
-		project.getDependencies().add( mainSourceSet.getImplementationConfigurationName(), quarkusCore( project ) );
+		project.getDependencies().add( mainSourceSet.getImplementationConfigurationName(), Helper.quarkusCore( project ) );
 
 		final PublishingExtension publishingExtension = project.getExtensions().getByType( PublishingExtension.class );
 		final PublicationContainer publications = publishingExtension.getPublications();
@@ -176,16 +172,25 @@ public class QuarkusExtensionPlugin implements Plugin<Project> {
 		runtimeJarTask.dependsOn( configRootsTask );
 		runtimeJarTask.dependsOn( extensionPropertiesTask );
 
-		final VerifyDependenciesTask verificationTask = project.getTasks().create(
-				VerifyDependenciesTask.TASK_NAME,
-				VerifyDependenciesTask.class,
+		final VerifyRuntimeDependencies verifyRuntimeDependencies = project.getTasks().create(
+				VerifyRuntimeDependencies.TASK_NAME,
+				VerifyRuntimeDependencies.class,
 				config
 		);
 
-		runtimeJarTask.finalizedBy( verificationTask );
+		final VerifyDeploymentDependencies verifyDeploymentDependencies = project.getTasks().create(
+				VerifyDeploymentDependencies.TASK_NAME,
+				VerifyDeploymentDependencies.class,
+				config
+		);
+
+		verifyDeploymentDependencies.dependsOn( verifyRuntimeDependencies );
+
+		runtimeJarTask.finalizedBy( verifyRuntimeDependencies );
+		runtimeJarTask.finalizedBy( verifyDeploymentDependencies );
 
 		// can't remember if check includes jar. easy enough to just add it both places, so...
-		project.getTasks().getByName( "check" ).dependsOn( verificationTask );
+		project.getTasks().getByName( "check" ).dependsOn( verifyDeploymentDependencies );
 	}
 
 	private void prepareDeployment(Project project) {
@@ -203,10 +208,10 @@ public class QuarkusExtensionPlugin implements Plugin<Project> {
 
 		project.getDependencies().add(
 				deploymentSourceSet.getImplementationConfigurationName(),
-				quarkusCoreDeployment( project )
+				Helper.quarkusCoreDeployment( project )
 		);
 		project.getDependencies().add(
-				deploymentSourceSet.getCompileOnlyConfigurationName(),
+				deploymentSourceSet.getImplementationConfigurationName(),
 				project.files( mainJarTask.getArchiveFile() )
 		);
 
@@ -645,20 +650,4 @@ public class QuarkusExtensionPlugin implements Plugin<Project> {
 		}
 	}
 
-	private static Dependency quarkusCore(Project project) {
-		return project.getDependencies().module( groupArtifact( QUARKUS_GROUP, QUARKUS_CORE ) );
-	}
-
-	private static Dependency quarkusCoreDeployment(Project project) {
-		return project.getDependencies().module( groupArtifact( QUARKUS_GROUP, QUARKUS_CORE_DEPLOYMENT ) );
-	}
-
-	public static String groupArtifact(String group, String artifact) {
-		return String.format(
-				Locale.ROOT,
-				"%s:%s",
-				group,
-				artifact
-		);
-	}
 }

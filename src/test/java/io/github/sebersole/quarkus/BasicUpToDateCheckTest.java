@@ -50,7 +50,8 @@ public class BasicUpToDateCheckTest {
 				":spiSourcesJar",
 				":compileTestJava",
 				":test",
-				":verifyQuarkusDependencies"
+				":verifyRuntimeDependencies",
+				":verifyDeploymentDependencies"
 		);
 
 		assertThat( new File( projectDir.toFile(), "build/quarkus/jandex/main.idx" ) ).exists();
@@ -87,7 +88,8 @@ public class BasicUpToDateCheckTest {
 				":spiSourcesJar",
 				":compileTestJava",
 				":test",
-				":verifyQuarkusDependencies"
+				":verifyRuntimeDependencies",
+				":verifyDeploymentDependencies"
 		);
 	}
 
