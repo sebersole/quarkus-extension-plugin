@@ -1,0 +1,24 @@
+plugins {
+    id 'io.github.sebersole.quarkus-extension'
+}
+
+repositories {
+    mavenCentral()
+}
+
+group = 'io.github.sebersole.quarkus'
+version = '1.0-SNAPSHOT'
+description = "Quarkus extension for testing this Gradle extension plugin (no sources -> error)"
+
+dependencies {
+    quarkusPlatforms enforcedPlatform( 'io.quarkus:quarkus-bom:2.8.0.Final' )
+
+    testImplementation 'org.junit.jupiter:junit-jupiter-api:5.8.1'
+    testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.8.1'
+}
+
+java {
+    withJavadocJar()
+    withSourcesJar()
+}
+

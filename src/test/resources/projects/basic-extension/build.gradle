@@ -12,13 +12,26 @@ version = '1.0-SNAPSHOT'
 dependencies {
     quarkusPlatforms platform( 'io.quarkus:quarkus-bom:2.8.0.Final' )
 
+    // will be available to:
+    //      1) the spi compile and runtime classpaths
+    //      2) the extension (main) compile and runtime classpaths
+    //      3) the deployment compile and runtime classpaths
+    //      4) the test compile and runtime classpaths
+    spiImplementation "org.hibernate.orm:hibernate-core:6.0.0.Final"
+
+    // will be available to:
+    //      1) the extension (main) compile and runtime classpaths
+    //      2) the deployment compile and runtime classpaths
+    //      3) the test compile and runtime classpaths
+    implementation "org.hibernate.orm:hibernate-envers:6.0.0.Final"
+
+    // will be available to:
+    //      1) the deployment compile and runtime classpaths
+    //      2) the test compile and runtime classpaths
+    deploymentImplementation "org.hibernate.orm:hibernate-spatial:6.0.0.Final"
+
     testImplementation 'org.junit.jupiter:junit-jupiter-api:5.8.1'
     testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.8.1'
-}
-
-java {
-    withJavadocJar()
-    withSourcesJar()
 }
 
 quarkusExtension {
@@ -29,4 +42,15 @@ quarkusExtension {
     guide = "https://hibernate.org"
     category "sample"
     keyword "gradle", "sample"
+}
+
+task showConfigurations {
+    doLast {
+        project.configurations.each { configuration ->
+            logger.lifecycle "Configuration : {}", configuration.name
+            logger.lifecycle "   - resolvable : {}", configuration.canBeResolved
+            logger.lifecycle "   - consumable : {}", configuration.canBeConsumed
+            logger.lifecycle "   - description : {}", configuration.description
+        }
+    }
 }

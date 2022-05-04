@@ -3,6 +3,8 @@ package io.github.sebersole.quarkus.extension;
 import io.quarkus.runtime.annotations.ConfigItem;
 import io.quarkus.runtime.annotations.ConfigPhase;
 import io.quarkus.runtime.annotations.ConfigRoot;
+import org.hibernate.SessionFactory;
+import org.hibernate.envers.AuditReader;
 
 /**
  * @author Steve Ebersole
@@ -11,6 +13,8 @@ import io.quarkus.runtime.annotations.ConfigRoot;
 public class MyExtensionConfig {
 
 	public MyExtensionConfig(MyExtensionSpi spi) {
+		SessionFactory sf;
+		AuditReader r;
 	}
 
 	@ConfigItem

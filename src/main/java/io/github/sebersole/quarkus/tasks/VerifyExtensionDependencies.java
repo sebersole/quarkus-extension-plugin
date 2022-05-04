@@ -24,8 +24,6 @@ import org.gradle.api.provider.Provider;
 import org.gradle.api.tasks.CacheableTask;
 import org.gradle.api.tasks.Classpath;
 import org.gradle.api.tasks.OutputFile;
-import org.gradle.api.tasks.PathSensitive;
-import org.gradle.api.tasks.PathSensitivity;
 import org.gradle.api.tasks.SourceSet;
 import org.gradle.api.tasks.SourceSetContainer;
 import org.gradle.api.tasks.TaskAction;
@@ -47,14 +45,14 @@ import static io.github.sebersole.quarkus.Helper.withJarFile;
  * @author Steve Ebersole
  */
 @CacheableTask
-public class VerifyRuntimeDependencies extends DefaultTask {
+public class VerifyExtensionDependencies extends DefaultTask {
 	public static final String TASK_NAME = "verifyRuntimeDependencies";
 
 	private final Property<Configuration> runtimeDependencies;
 	private final Provider<RegularFile> output;
 
 	@Inject
-	public VerifyRuntimeDependencies(@SuppressWarnings("unused") ExtensionDescriptor config) {
+	public VerifyExtensionDependencies(@SuppressWarnings("unused") ExtensionDescriptor config) {
 		setGroup( Names.TASK_GROUP );
 		setDescription( "Verifies `runtimeClasspath`, making sure there are no deployment artifacts" );
 

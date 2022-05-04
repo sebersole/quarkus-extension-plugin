@@ -26,7 +26,7 @@ import jakarta.json.stream.JsonGenerator;
  * @author Steve Ebersole
  */
 public class ModuleMetadataAdjuster {
-	static void runtimeAdjustments(RegularFile moduleFile, Project project) {
+	static void extensionAdjustments(RegularFile moduleFile, Project project) {
 		withModuleDescriptor( project, moduleFile, (json, adjustmentsAccess) -> withVariants(
 				adjustmentsAccess,
 				json,

@@ -33,7 +33,7 @@ public class ExtensionPublishingTests {
 
 		final File publishingPrepOutput = new File( projectDir.toFile(), "build/publications" );
 
-		final File runtimeArtifactDir = new File( publishingPrepOutput, "runtime" );
+		final File runtimeArtifactDir = new File( publishingPrepOutput, "extension" );
 		assertThat( runtimeArtifactDir ).exists();
 		final File runtimePom = new File( runtimeArtifactDir, "pom-default.xml" );
 		assertThat( runtimePom ).exists();

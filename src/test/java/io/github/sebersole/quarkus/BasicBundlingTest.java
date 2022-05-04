@@ -48,7 +48,7 @@ public class BasicBundlingTest {
 				.withProjectDir( projectDir.toFile() )
 				.withPluginClasspath()
 				.withDebug( true )
-				.withArguments( "build", "preparePublications", "--stacktrace", "--no-build-cache" )
+				.withArguments( "showConfigurations", "build", "preparePublications", "--stacktrace", "--no-build-cache" )
 				.forwardOutput();
 
 		final BuildResult buildResult = gradleRunner.build();
@@ -65,7 +65,7 @@ public class BasicBundlingTest {
 		final File buildDir = new File( projectDir.toFile(), "build" );
 		assertThat( buildDir ).exists();
 
-		checkRuntime( buildDir );
+		checkExtension( buildDir );
 		checkDeployment( buildDir );
 		checkSpi( buildDir );
 	}
@@ -74,7 +74,7 @@ public class BasicBundlingTest {
 		Copier.copyProject( "basic-extension/build.gradle", projectDir );
 	}
 
-	private void checkRuntime(File buildDir) {
+	private void checkExtension(File buildDir) {
 		assertThat( new File( buildDir, "classes/java/main" ) ).exists();
 		assertThat( new File( buildDir, "classes/java/test" ) ).exists();
 
@@ -85,8 +85,8 @@ public class BasicBundlingTest {
 		checkConfigRoots( buildDir, jar );
 		checkExtensionProperties( buildDir, jar );
 
-		checkForPomDescriptor( new File( buildDir, "publications/runtime" ), "basic-extension-spi" );
-		checkModuleDescriptor( new File( buildDir, "publications/runtime" ), "basic-extension-spi" );
+		checkForPomDescriptor( new File( buildDir, "publications/extension" ), "basic-extension-spi" );
+		checkModuleDescriptor( new File( buildDir, "publications/extension" ), "basic-extension-spi" );
 	}
 
 	private void checkForPomDescriptor(File publicationDir, String dependencyArtifactId) {

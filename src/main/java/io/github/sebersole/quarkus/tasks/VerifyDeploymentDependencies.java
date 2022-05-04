@@ -29,12 +29,12 @@ import org.gradle.api.tasks.SourceSetContainer;
 import org.gradle.api.tasks.TaskAction;
 
 import io.github.sebersole.quarkus.ExtensionDescriptor;
-import io.github.sebersole.quarkus.Helper;
 import io.github.sebersole.quarkus.Names;
 import io.github.sebersole.quarkus.ValidationException;
 
 import static io.github.sebersole.quarkus.Helper.groupArtifactVersion;
 import static io.github.sebersole.quarkus.Helper.hasExtensionProperties;
+import static io.github.sebersole.quarkus.Helper.withJarFile;
 
 /**
  * @author Steve Ebersole
@@ -69,12 +69,12 @@ public abstract class VerifyDeploymentDependencies extends DefaultTask {
 				} )
 		);
 
-		final VerifyRuntimeDependencies verifyRuntimeDependencies = (VerifyRuntimeDependencies) getProject().getTasks().getByName( VerifyRuntimeDependencies.TASK_NAME );
-		dependencyCatalog = verifyRuntimeDependencies.getOutput();
+		final VerifyExtensionDependencies verifyExtensionDependencies = (VerifyExtensionDependencies) getProject().getTasks().getByName( VerifyExtensionDependencies.TASK_NAME );
+		dependencyCatalog = verifyExtensionDependencies.getOutput();
 
 		output = getProject().getLayout().getBuildDirectory().file( "tmp/verifyQuarkusDependencies.txt" );
 
-		dependsOn( verifyRuntimeDependencies );
+		dependsOn( verifyExtensionDependencies );
 	}
 
 	@Classpath
@@ -119,14 +119,12 @@ public abstract class VerifyDeploymentDependencies extends DefaultTask {
 	private void verifyDeploymentDependencies(Properties catalog) {
 		final ResolvedConfiguration resolvedDeploymentDependencies = deploymentDependencies.get().getResolvedConfiguration();
 		final Set<String> extensionsOnDeploymentClasspath = new HashSet<>();
-		resolvedDeploymentDependencies.getResolvedArtifacts().forEach( (artifact) -> {
-			Helper.withJarFile( artifact.getFile(), (jarFile) -> {
-				if ( hasExtensionProperties( jarFile ) ) {
-					final ModuleVersionIdentifier moduleId = artifact.getModuleVersion().getId();
-					extensionsOnDeploymentClasspath.add( groupArtifactVersion( moduleId ) );
-				}
-			} );
-		} );
+		resolvedDeploymentDependencies.getResolvedArtifacts().forEach( (artifact) -> withJarFile( artifact.getFile(), (jarFile) -> {
+			if ( hasExtensionProperties( jarFile ) ) {
+				final ModuleVersionIdentifier moduleId = artifact.getModuleVersion().getId();
+				extensionsOnDeploymentClasspath.add( groupArtifactVersion( moduleId ) );
+			}
+		} ) );
 
 		extensionsOnDeploymentClasspath.removeAll( catalog.stringPropertyNames() );
 

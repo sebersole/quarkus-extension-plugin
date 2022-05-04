@@ -1,5 +1,8 @@
 package io.github.sebersole.quarkus.extension;
 
+import org.hibernate.SessionFactory;
+import org.hibernate.envers.AuditReader;
+import org.hibernate.spatial.Spatial;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -12,5 +15,8 @@ public class MyExtensionTest {
 		MyExtensionConfig config;
 		MyExtensionProcessor processor;
 		MyExtensionSpi spi;
+		SessionFactory sf;
+		AuditReader r;
+		Spatial s;
 	}
 }

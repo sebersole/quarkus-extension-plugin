@@ -8,6 +8,7 @@ import org.gradle.api.Plugin;
 import org.gradle.api.Project;
 import org.gradle.api.Task;
 import org.gradle.api.artifacts.Configuration;
+import org.gradle.api.artifacts.ConfigurationContainer;
 import org.gradle.api.artifacts.ConfigurationPublications;
 import org.gradle.api.attributes.Bundling;
 import org.gradle.api.attributes.Category;
@@ -43,7 +44,7 @@ import io.github.sebersole.quarkus.tasks.GenerateExtensionPropertiesFile;
 import io.github.sebersole.quarkus.tasks.IndexManager;
 import io.github.sebersole.quarkus.tasks.IndexerTask;
 import io.github.sebersole.quarkus.tasks.VerifyDeploymentDependencies;
-import io.github.sebersole.quarkus.tasks.VerifyRuntimeDependencies;
+import io.github.sebersole.quarkus.tasks.VerifyExtensionDependencies;
 
 import static io.github.sebersole.quarkus.Names.DSL_EXTENSION_NAME;
 
@@ -72,15 +73,24 @@ public class QuarkusExtensionPlugin implements Plugin<Project> {
 				project
 		);
 
+		preparePlatforms( project );
+
 		final JavaPluginExtension javaPluginExtension = project.getExtensions().getByType( JavaPluginExtension.class );
 		javaPluginExtension.withJavadocJar();
 		javaPluginExtension.withSourcesJar();
 
-		preparePlatforms( project );
+		final SourceSetContainer sourceSets = javaPluginExtension.getSourceSets();
 
-		prepareRuntime( config, project );
-		prepareDeployment( project );
-		prepareSpi( project );
+		final SourceSet deploymentSourceSet = sourceSets.maybeCreate( "deployment" );
+		final SourceSet spiSourceSet = sourceSets.maybeCreate( "spi" );
+		final SourceSet extensionSourceSet = sourceSets.getByName( SourceSet.MAIN_SOURCE_SET_NAME );
+		final SourceSet testSourceSet = sourceSets.getByName( SourceSet.TEST_SOURCE_SET_NAME );
+
+		prepareExtension( extensionSourceSet, config, project );
+		prepareSpi( spiSourceSet, extensionSourceSet, project );
+		prepareDeployment( deploymentSourceSet, extensionSourceSet, testSourceSet, project );
+
+		prepareTesting( testSourceSet, extensionSourceSet, deploymentSourceSet, spiSourceSet, project );
 
 		applyAdjustments( project );
 	}
@@ -101,22 +111,58 @@ public class QuarkusExtensionPlugin implements Plugin<Project> {
 		} );
 	}
 
-	private void prepareRuntime(ExtensionDescriptor config, Project project) {
-		final SourceSetContainer sourceSets = project.getExtensions().getByType( SourceSetContainer.class );
-		final SourceSet mainSourceSet = sourceSets.getByName( "main" );
+	private void linkConfigurations(SourceSet outgoing, SourceSet incoming, ConfigurationContainer configurations) {
+		configurations.getByName( incoming.getApiConfigurationName() ).extendsFrom(
+				configurations.getByName( outgoing.getApiConfigurationName() )
+		);
 
-		project.getDependencies().add( mainSourceSet.getImplementationConfigurationName(), Helper.quarkusCore( project ) );
+		configurations.getByName( incoming.getCompileOnlyApiConfigurationName() ).extendsFrom(
+				configurations.getByName( outgoing.getCompileOnlyApiConfigurationName() )
+		);
+
+		configurations.getByName( incoming.getCompileOnlyConfigurationName() ).extendsFrom(
+				configurations.getByName( outgoing.getCompileOnlyConfigurationName() )
+		);
+
+		configurations.getByName( incoming.getImplementationConfigurationName() ).extendsFrom(
+				configurations.getByName( outgoing.getImplementationConfigurationName() )
+		);
+
+		configurations.getByName( incoming.getRuntimeOnlyConfigurationName() ).extendsFrom(
+				configurations.getByName( outgoing.getRuntimeOnlyConfigurationName() )
+		);
+	}
+
+	private void prepareSpi(SourceSet spiSourceSet, SourceSet extensionSourceSet, Project project) {
+		prepareAdHocPublication( spiSourceSet, project );
+		applyApiConfigurations( spiSourceSet, project );
+
+		final Jar spiJarTask = (Jar) project.getTasks().getByName( spiSourceSet.getJarTaskName() );
+		project.getDependencies().add(
+				extensionSourceSet.getImplementationConfigurationName(),
+				project.files( spiJarTask.getArchiveFile() )
+		);
+
+		linkConfigurations( spiSourceSet, extensionSourceSet, project.getConfigurations() );
+	}
+
+	private void prepareExtension(SourceSet extensionSourceSet, ExtensionDescriptor config, Project project) {
+
+		project.getDependencies().add(
+				extensionSourceSet.getImplementationConfigurationName(),
+				Helper.quarkusCore( project )
+		);
 
 		final PublishingExtension publishingExtension = project.getExtensions().getByType( PublishingExtension.class );
 		final PublicationContainer publications = publishingExtension.getPublications();
-		publications.create( "runtime", MavenPublication.class, (publication) -> {
+		publications.create( "extension", MavenPublication.class, (publication) -> {
 			publication.setArtifactId( project.getName() );
 			publication.from( project.getComponents().getByName( "java" ) );
 		} );
 
-		final IndexManager indexManager = new IndexManager( mainSourceSet, project );
+		final IndexManager indexManager = new IndexManager( extensionSourceSet, project );
 		final IndexerTask indexerTask = project.getTasks().create(
-				mainSourceSet.getTaskName( "index", "classes" ),
+				extensionSourceSet.getTaskName( "index", "classes" ),
 				IndexerTask.class,
 				indexManager
 		);
@@ -138,20 +184,20 @@ public class QuarkusExtensionPlugin implements Plugin<Project> {
 				GenerateExtensionPropertiesFile.class
 		);
 
-		indexerTask.dependsOn( mainSourceSet.getCompileJavaTaskName() );
+		indexerTask.dependsOn( extensionSourceSet.getCompileJavaTaskName() );
 		configRootsTask.dependsOn( indexerTask );
 
-		final Jar runtimeJarTask = (Jar) project.getTasks().getByName( mainSourceSet.getJarTaskName() );
-		runtimeJarTask.from( generateDescriptorTask.getDescriptorFileReference(), (copySpec) -> copySpec.into( "META-INF" ) );
-		runtimeJarTask.from( configRootsTask.getListFileReference(), (copySpec) -> copySpec.into( "META-INF" ) );
-		runtimeJarTask.from( extensionPropertiesTask.getPropertiesFile(), (copySpec) -> copySpec.into( "META-INF" ) );
-		runtimeJarTask.dependsOn( generateDescriptorTask );
-		runtimeJarTask.dependsOn( configRootsTask );
-		runtimeJarTask.dependsOn( extensionPropertiesTask );
+		final Jar extensionJarTask = (Jar) project.getTasks().getByName( extensionSourceSet.getJarTaskName() );
+		extensionJarTask.from( generateDescriptorTask.getDescriptorFileReference(), (copySpec) -> copySpec.into( "META-INF" ) );
+		extensionJarTask.from( configRootsTask.getListFileReference(), (copySpec) -> copySpec.into( "META-INF" ) );
+		extensionJarTask.from( extensionPropertiesTask.getPropertiesFile(), (copySpec) -> copySpec.into( "META-INF" ) );
+		extensionJarTask.dependsOn( generateDescriptorTask );
+		extensionJarTask.dependsOn( configRootsTask );
+		extensionJarTask.dependsOn( extensionPropertiesTask );
 
-		final VerifyRuntimeDependencies verifyRuntimeDependencies = project.getTasks().create(
-				VerifyRuntimeDependencies.TASK_NAME,
-				VerifyRuntimeDependencies.class,
+		final VerifyExtensionDependencies verifyExtensionDependencies = project.getTasks().create(
+				VerifyExtensionDependencies.TASK_NAME,
+				VerifyExtensionDependencies.class,
 				config
 		);
 
@@ -161,26 +207,22 @@ public class QuarkusExtensionPlugin implements Plugin<Project> {
 				config
 		);
 
-		verifyDeploymentDependencies.dependsOn( verifyRuntimeDependencies );
+		verifyDeploymentDependencies.dependsOn( verifyExtensionDependencies );
 
-		runtimeJarTask.finalizedBy( verifyRuntimeDependencies );
-		runtimeJarTask.finalizedBy( verifyDeploymentDependencies );
+		extensionJarTask.finalizedBy( verifyExtensionDependencies );
+		extensionJarTask.finalizedBy( verifyDeploymentDependencies );
 
 		// can't remember if check includes jar. easy enough to just add it both places, so...
 		project.getTasks().getByName( "check" ).dependsOn( verifyDeploymentDependencies );
 	}
 
-	private void prepareDeployment(Project project) {
-		final SourceSetContainer sourceSets = project.getExtensions().getByType( SourceSetContainer.class );
-		final SourceSet deploymentSourceSet = sourceSets.maybeCreate( "deployment" );
-
-		final SourceSet mainSourceSet = sourceSets.getByName( "main" );
-		final SourceSet testSourceSet = sourceSets.getByName( "test" );
-
-		preparePublication( deploymentSourceSet, project );
+	private void prepareDeployment(SourceSet deploymentSourceSet, SourceSet extensionSourceSet, SourceSet testSourceSet, Project project) {
+		prepareAdHocPublication( deploymentSourceSet, project );
+		applyApiConfigurations( deploymentSourceSet, project );
+		linkConfigurations( extensionSourceSet, deploymentSourceSet, project.getConfigurations() );
 
 		final TaskContainer taskContainer = project.getTasks();
-		final Jar mainJarTask = (Jar) taskContainer.getByName( mainSourceSet.getJarTaskName() );
+		final Jar mainJarTask = (Jar) taskContainer.getByName( extensionSourceSet.getJarTaskName() );
 		final Jar deploymentJarTask = (Jar) taskContainer.getByName( deploymentSourceSet.getJarTaskName() );
 
 		project.getDependencies().add(
@@ -191,13 +233,6 @@ public class QuarkusExtensionPlugin implements Plugin<Project> {
 				deploymentSourceSet.getImplementationConfigurationName(),
 				project.files( mainJarTask.getArchiveFile() )
 		);
-
-		project.getDependencies().add(
-				testSourceSet.getImplementationConfigurationName(),
-				project.files( deploymentJarTask.getArchiveFile() )
-		);
-
-		taskContainer.getByName( testSourceSet.getCompileJavaTaskName() ).dependsOn( deploymentJarTask );
 
 
 		final IndexManager indexManager = new IndexManager( deploymentSourceSet, project );
@@ -218,8 +253,8 @@ public class QuarkusExtensionPlugin implements Plugin<Project> {
 		buildStepsListTask.dependsOn( indexerTask );
 	}
 
-	private void preparePublication(SourceSet sourceSet, Project project) {
-		// e.g., `deployment` or `spi`
+	private void prepareAdHocPublication(SourceSet sourceSet, Project project) {
+		// `deployment` or `spi`
 		final String publicationName = sourceSet.getName();
 
 		final PublishingExtension publishingExtension = project.getExtensions().getByType( PublishingExtension.class );
@@ -231,7 +266,7 @@ public class QuarkusExtensionPlugin implements Plugin<Project> {
 		// artifact to the publication we are preparing
 		transferBasicPomDetails(
 				// from
-				( (MavenPublication) publishingExtension.getPublications().getByName( "runtime" ) ).getPom(),
+				( (MavenPublication) publishingExtension.getPublications().getByName( "extension" ) ).getPom(),
 				// to
 				publication.getPom(),
 				project
@@ -243,7 +278,7 @@ public class QuarkusExtensionPlugin implements Plugin<Project> {
 		publication.from( publicationComponent );
 
 		final SourceSetContainer sourceSets = project.getExtensions().getByType( SourceSetContainer.class );
-		final SourceSet mainSourceSet = sourceSets.getByName( "main" );
+		final SourceSet mainSourceSet = sourceSets.getByName( SourceSet.MAIN_SOURCE_SET_NAME );
 
 		final TaskContainer taskContainer = project.getTasks();
 		final Jar mainJarTask = (Jar) taskContainer.getByName( mainSourceSet.getJarTaskName() );
@@ -259,6 +294,8 @@ public class QuarkusExtensionPlugin implements Plugin<Project> {
 
 			task.from( sourceSet.getJava().getDestinationDirectory() );
 			task.getDestinationDirectory().set( mainJarTask.getDestinationDirectory() );
+
+			task.onlyIf( (t) -> ! sourceSet.getAllSource().isEmpty() );
 		} );
 
 		final Provider<Directory> javadocDir = project.getLayout().getBuildDirectory().dir( "docs/javadoc-" + publicationName );
@@ -271,6 +308,8 @@ public class QuarkusExtensionPlugin implements Plugin<Project> {
 			task.source( sourceSet.getAllJava() );
 			task.setClasspath( sourceSet.getCompileClasspath() );
 			task.setDestinationDir( javadocDir.get().getAsFile() );
+
+			task.onlyIf( (t) -> ! sourceSet.getAllSource().isEmpty() );
 		} );
 
 		final Jar javadocJarTask = taskContainer.create( sourceSet.getJavadocJarTaskName(), Jar.class, (task) -> {
@@ -285,6 +324,8 @@ public class QuarkusExtensionPlugin implements Plugin<Project> {
 
 			task.from( javadocDir );
 			task.getDestinationDirectory().set( mainJarTask.getDestinationDirectory() );
+
+			task.onlyIf( (t) -> ! sourceSet.getAllSource().isEmpty() );
 		} );
 
 		final Jar sourcesJarTask = taskContainer.create( sourceSet.getSourcesJarTaskName(), Jar.class, (task) -> {
@@ -298,6 +339,8 @@ public class QuarkusExtensionPlugin implements Plugin<Project> {
 
 			task.from( sourceSet.getAllSource() );
 			task.getDestinationDirectory().set( mainJarTask.getDestinationDirectory() );
+
+			task.onlyIf( (t) -> ! sourceSet.getAllSource().isEmpty() );
 		} );
 
 		final Task buildTask = taskContainer.getByName( "build" );
@@ -307,6 +350,32 @@ public class QuarkusExtensionPlugin implements Plugin<Project> {
 
 		// create the main, javadoc and sources variants
 		applyModuleVariants( sourceSet, project, publicationComponent, jarTask, javadocJarTask, sourcesJarTask );
+	}
+
+	private void applyApiConfigurations(SourceSet sourceSet, Project project) {
+		final String publicationName = sourceSet.getName();
+		final ConfigurationContainer configurations = project.getConfigurations();
+
+		final Configuration apiConfiguration = configurations.create( publicationName + "Api", (files) -> {
+			files.setDescription( "API dependencies for the `" + publicationName + "` source set." );
+			files.setVisible( false );
+			files.setCanBeResolved( false );
+			files.setCanBeConsumed( false );
+		} );
+
+		final Configuration compileOnlyApiConfiguration = configurations.create( publicationName + "CompileOnlyApi", (files) -> {
+			files.setDescription( "Compile-only API dependencies for the `" + publicationName + "` source set." );
+			files.setVisible( false );
+			files.setCanBeResolved( false );
+			files.setCanBeConsumed( false );
+		} );
+
+		final Configuration apiElementsConfiguration = configurations.getByName( sourceSet.getApiElementsConfigurationName() );
+		apiElementsConfiguration.extendsFrom( apiConfiguration, compileOnlyApiConfiguration );
+		Configuration implementationConfiguration = configurations.getByName(sourceSet.getImplementationConfigurationName());
+		implementationConfiguration.extendsFrom( apiConfiguration );
+		Configuration compileOnlyConfiguration = configurations.getByName(sourceSet.getCompileOnlyConfigurationName());
+		compileOnlyConfiguration.extendsFrom( compileOnlyApiConfiguration );
 	}
 
 	private void transferBasicPomDetails(MavenPom from, MavenPom to, Project project) {
@@ -359,6 +428,7 @@ public class QuarkusExtensionPlugin implements Plugin<Project> {
 		final ObjectFactory objectFactory = project.getObjects();
 
 		final Configuration apiElements = project.getConfigurations().maybeCreate( sourceSet.getApiElementsConfigurationName() );
+		apiElements.setDescription( "Outgoing API elements for `" + sourceSet.getName() + "`" );
 		apiElements.setCanBeResolved(false);
 		apiElements.setCanBeConsumed(true);
 		apiElements.getAttributes().attribute( Usage.USAGE_ATTRIBUTE, objectFactory.named(Usage.class, Usage.JAVA_API) );
@@ -373,6 +443,7 @@ public class QuarkusExtensionPlugin implements Plugin<Project> {
 
 
 		final Configuration runtimeElements = project.getConfigurations().maybeCreate( sourceSet.getRuntimeElementsConfigurationName() );
+		runtimeElements.setDescription( "Outgoing runtime elements for `" + sourceSet.getName() + "`" );
 		runtimeElements.setCanBeResolved(false);
 		runtimeElements.setCanBeConsumed(true);
 		runtimeElements.getAttributes().attribute( Usage.USAGE_ATTRIBUTE, objectFactory.named(Usage.class, Usage.JAVA_RUNTIME) );
@@ -387,6 +458,7 @@ public class QuarkusExtensionPlugin implements Plugin<Project> {
 
 
 		final Configuration javadocElements = project.getConfigurations().maybeCreate( sourceSet.getJavadocElementsConfigurationName() );
+		javadocElements.setDescription( "Outgoing javadoc elements for `" + sourceSet.getName() + "`" );
 		javadocElements.setCanBeResolved(false);
 		javadocElements.setCanBeConsumed(true);
 		javadocElements.getAttributes().attribute( Usage.USAGE_ATTRIBUTE, objectFactory.named(Usage.class, Usage.JAVA_RUNTIME) );
@@ -400,6 +472,7 @@ public class QuarkusExtensionPlugin implements Plugin<Project> {
 
 
 		final Configuration sourcesElements = project.getConfigurations().maybeCreate( sourceSet.getSourcesElementsConfigurationName() );
+		sourcesElements.setDescription( "Outgoing sources elements for `" + sourceSet.getName() + "`" );
 		sourcesElements.setCanBeResolved(false);
 		sourcesElements.setCanBeConsumed(true);
 		sourcesElements.getAttributes().attribute( Usage.USAGE_ATTRIBUTE, objectFactory.named(Usage.class, Usage.JAVA_RUNTIME) );
@@ -412,34 +485,39 @@ public class QuarkusExtensionPlugin implements Plugin<Project> {
 		publicationComponent.addVariantsFromConfiguration( sourcesElements, (details) -> details.mapToMavenScope( "runtime" ) );
 	}
 
-	private void prepareSpi(Project project) {
-		final SourceSetContainer sourceSets = project.getExtensions().getByType( SourceSetContainer.class );
-		final SourceSet spiSourceSet = sourceSets.maybeCreate( "spi" );
-		final SourceSet mainSourceSet = sourceSets.getByName( "main" );
+	private void prepareTesting(SourceSet testSourceSet, SourceSet extensionSourceSet, SourceSet deploymentSourceSet, SourceSet spiSourceSet, Project project) {
+		final TaskContainer taskContainer = project.getTasks();
+		final Jar deploymentJarTask = (Jar) taskContainer.getByName( deploymentSourceSet.getJarTaskName() );
+		taskContainer.getByName( testSourceSet.getCompileJavaTaskName() ).dependsOn( deploymentJarTask );
 
-		project.afterEvaluate( (p) -> {
-			if ( spiSourceSet.getJava().isEmpty() && spiSourceSet.getResources().isEmpty() ) {
-				project.getLogger().debug( "Skipping SPI module set-up : no sources" );
-				return;
-			}
+		project.getDependencies().add(
+				testSourceSet.getImplementationConfigurationName(),
+				project.files( deploymentJarTask.getArchiveFile() )
+		);
 
-			project.getLogger().debug( "Starting SPI module set-up" );
+		final ConfigurationContainer configurations = project.getConfigurations();
 
-			preparePublication( spiSourceSet, project );
+		// testCompileOnly
+		configurations.getByName( testSourceSet.getCompileOnlyConfigurationName() ).extendsFrom(
+				configurations.getByName( deploymentSourceSet.getCompileOnlyConfigurationName() )
+		);
 
-			final Jar spiJarTask = (Jar) project.getTasks().getByName( spiSourceSet.getJarTaskName() );
-			project.getDependencies().add(
-					mainSourceSet.getImplementationConfigurationName(),
-					project.files( spiJarTask.getArchiveFile() )
-			);
-		} );
+		// testImplementation
+		configurations.getByName( testSourceSet.getImplementationConfigurationName() ).extendsFrom(
+				configurations.getByName( deploymentSourceSet.getImplementationConfigurationName() )
+		);
+
+		// testRuntimeOnly
+		configurations.getByName( testSourceSet.getRuntimeOnlyConfigurationName() ).extendsFrom(
+				configurations.getByName( deploymentSourceSet.getRuntimeOnlyConfigurationName() )
+		);
 	}
 
 	/**
 	 * We need to adjust:
 	 *
-	 * 	- the `deployment` pom and module descriptor files to add `runtime` as a dependency by its GAV
-	 * 	- the `runtime` pom and module descriptor files to add `spi` as a dependency by its GAV
+	 * 	- the `deployment` pom and module descriptor files to add `extension` as a dependency by its GAV
+	 * 	- the `extension` pom and module descriptor files to add `spi` as a dependency by its GAV
 	 * 	- the `deployment` Gradle module descriptor to adjust `deploymentApiElements`, etc
 	 * 	- the `spi` Gradle module descriptor to adjust `spiApiElements`, etc
 	 */
@@ -452,10 +530,10 @@ public class QuarkusExtensionPlugin implements Plugin<Project> {
 		preparePublications.dependsOn( generatePomFiles, generateMetadataFiles );
 
 		taskContainer.all( (task) -> {
-			if ( task.getName().equals( "generatePomFileForRuntimePublication" ) ) {
-				final GenerateMavenPom runtimePomTask = (GenerateMavenPom) task;
-				adjustRuntimePomGeneration( runtimePomTask, project );
-				generatePomFiles.dependsOn( runtimePomTask );
+			if ( task.getName().equals( "generatePomFileForExtensionPublication" ) ) {
+				final GenerateMavenPom extensionPomTask = (GenerateMavenPom) task;
+				adjustExtensionPomGeneration( extensionPomTask, project );
+				generatePomFiles.dependsOn( extensionPomTask );
 			}
 			else if ( task.getName().equals( "generatePomFileForDeploymentPublication" ) ) {
 				final GenerateMavenPom deploymentPomTask = (GenerateMavenPom) task;
@@ -467,10 +545,10 @@ public class QuarkusExtensionPlugin implements Plugin<Project> {
 				adjustSpiPomGeneration( spiPomTask, project );
 				generatePomFiles.dependsOn( spiPomTask );
 			}
-			else if ( task.getName().equals( "generateMetadataFileForRuntimePublication" ) ) {
-				final GenerateModuleMetadata runtimeModuleTask = (GenerateModuleMetadata) task;
-				adjustRuntimeMetadataGeneration( runtimeModuleTask, project );
-				generateMetadataFiles.dependsOn( runtimeModuleTask );
+			else if ( task.getName().equals( "generateMetadataFileForExtensionPublication" ) ) {
+				final GenerateModuleMetadata extensionModuleTask = (GenerateModuleMetadata) task;
+				adjustExtensionMetadataGeneration( extensionModuleTask, project );
+				generateMetadataFiles.dependsOn( extensionModuleTask );
 			}
 			else if ( task.getName().equals( "generateMetadataFileForDeploymentPublication" ) ) {
 				final GenerateModuleMetadata deploymentModuleTask = (GenerateModuleMetadata) task;
@@ -485,13 +563,13 @@ public class QuarkusExtensionPlugin implements Plugin<Project> {
 		} );
 	}
 
-	private void adjustRuntimePomGeneration(GenerateMavenPom runtimePomTask, Project project) {
+	private void adjustExtensionPomGeneration(GenerateMavenPom extensionPomTask, Project project) {
 		//do not convert this to a lambda - causes the tasks to not be cacheable
 		//noinspection Convert2Lambda
-		runtimePomTask.doLast( new Action<>() {
+		extensionPomTask.doLast( new Action<>() {
 			@Override
 			public void execute(@SuppressWarnings("NullableProblems") Task task) {
-				PomAdjuster.applyDependency( runtimePomTask.getDestination(), project.getName() + "-spi", project );
+				PomAdjuster.applyDependency( extensionPomTask.getDestination(), project.getName() + "-spi", project );
 			}
 		} );
 	}
@@ -512,15 +590,15 @@ public class QuarkusExtensionPlugin implements Plugin<Project> {
 		spiPomTask.setDescription( "Generate the pom file for the `spi` publication" );
 	}
 
-	private void adjustRuntimeMetadataGeneration(GenerateModuleMetadata runtimeModuleTask, Project project) {
-		runtimeModuleTask.setDescription( "Generate the module descriptor file for the `runtime` publication" );
+	private void adjustExtensionMetadataGeneration(GenerateModuleMetadata extensionModuleTask, Project project) {
+		extensionModuleTask.setDescription( "Generate the module descriptor file for the `extension` publication" );
 
 		//do not convert this to a lambda - causes the tasks to not be cacheable
 		//noinspection Convert2Lambda
-		runtimeModuleTask.doLast( new Action<>() {
+		extensionModuleTask.doLast( new Action<>() {
 			@Override
 			public void execute(@SuppressWarnings("NullableProblems") Task task) {
-				ModuleMetadataAdjuster.runtimeAdjustments( runtimeModuleTask.getOutputFile().get(), project );
+				ModuleMetadataAdjuster.extensionAdjustments( extensionModuleTask.getOutputFile().get(), project );
 			}
 		} );
 	}
@@ -528,7 +606,7 @@ public class QuarkusExtensionPlugin implements Plugin<Project> {
 	private void adjustDeploymentMetadataGeneration(GenerateModuleMetadata deploymentModuleTask, Project project) {
 		deploymentModuleTask.setDescription( "Generate the module descriptor file for the `deployment` publication" );
 
-		// should add the `runtime` artifact as a dependency
+		// should add the `extension` artifact as a dependency
 
 		//do not convert this to a lambda - causes the tasks to not be cacheable
 		//noinspection Convert2Lambda

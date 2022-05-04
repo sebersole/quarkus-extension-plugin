@@ -47,7 +47,7 @@ public class DefaultMetadataTest {
 
 	private void checkDeployment(File buildDir) {
 		final File jar = new File( buildDir, "libs/default-metadata-extension-deployment-1.0-SNAPSHOT.jar" );
-		assertThat( jar ).exists();
+		assertThat( jar ).doesNotExist();
 	}
 
 	private void checkRuntime(File buildDir) {
