@@ -1,23 +1,6 @@
 package io.github.sebersole.quarkus;
 
-import java.io.File;
-import java.io.FileReader;
-import java.io.FileWriter;
-import java.io.IOException;
-import java.io.LineNumberReader;
-import java.util.ArrayList;
-import java.util.List;
 import javax.inject.Inject;
-import javax.xml.parsers.DocumentBuilder;
-import javax.xml.parsers.DocumentBuilderFactory;
-import javax.xml.parsers.ParserConfigurationException;
-import javax.xml.transform.OutputKeys;
-import javax.xml.transform.Transformer;
-import javax.xml.transform.TransformerConfigurationException;
-import javax.xml.transform.TransformerException;
-import javax.xml.transform.TransformerFactory;
-import javax.xml.transform.dom.DOMSource;
-import javax.xml.transform.stream.StreamResult;
 
 import org.gradle.api.Action;
 import org.gradle.api.JavaVersion;
@@ -35,7 +18,6 @@ import org.gradle.api.attributes.java.TargetJvmVersion;
 import org.gradle.api.component.AdhocComponentWithVariants;
 import org.gradle.api.component.SoftwareComponentFactory;
 import org.gradle.api.file.Directory;
-import org.gradle.api.file.RegularFile;
 import org.gradle.api.internal.artifacts.ArtifactAttributes;
 import org.gradle.api.model.ObjectFactory;
 import org.gradle.api.plugins.JavaLibraryPlugin;
@@ -54,7 +36,6 @@ import org.gradle.api.tasks.TaskContainer;
 import org.gradle.api.tasks.javadoc.Javadoc;
 import org.gradle.jvm.tasks.Jar;
 
-import io.github.sebersole.quarkus.tasks.VerifyRuntimeDependencies;
 import io.github.sebersole.quarkus.tasks.GenerateBuildStepsList;
 import io.github.sebersole.quarkus.tasks.GenerateConfigRootsList;
 import io.github.sebersole.quarkus.tasks.GenerateDescriptor;
@@ -62,11 +43,7 @@ import io.github.sebersole.quarkus.tasks.GenerateExtensionPropertiesFile;
 import io.github.sebersole.quarkus.tasks.IndexManager;
 import io.github.sebersole.quarkus.tasks.IndexerTask;
 import io.github.sebersole.quarkus.tasks.VerifyDeploymentDependencies;
-import org.w3c.dom.Document;
-import org.w3c.dom.Element;
-import org.w3c.dom.Node;
-import org.w3c.dom.NodeList;
-import org.xml.sax.SAXException;
+import io.github.sebersole.quarkus.tasks.VerifyRuntimeDependencies;
 
 import static io.github.sebersole.quarkus.Names.DSL_EXTENSION_NAME;
 
@@ -392,9 +369,7 @@ public class QuarkusExtensionPlugin implements Plugin<Project> {
 		final ConfigurationPublications apiElementsOutgoing = apiElements.getOutgoing();
 		apiElementsOutgoing.artifact( jarTask );
 		apiElementsOutgoing.getAttributes().attribute( ArtifactAttributes.ARTIFACT_FORMAT, "jar");
-		publicationComponent.addVariantsFromConfiguration( apiElements, (details) -> {
-			details.mapToMavenScope( "compile" );
-		} );
+		publicationComponent.addVariantsFromConfiguration( apiElements, (details) -> details.mapToMavenScope( "compile" ) );
 
 
 		final Configuration runtimeElements = project.getConfigurations().maybeCreate( sourceSet.getRuntimeElementsConfigurationName() );
@@ -408,9 +383,7 @@ public class QuarkusExtensionPlugin implements Plugin<Project> {
 		final ConfigurationPublications runtimeElementsOutgoing = runtimeElements.getOutgoing();
 		runtimeElements.getOutgoing().artifact( jarTask );
 		runtimeElementsOutgoing.getAttributes().attribute( ArtifactAttributes.ARTIFACT_FORMAT, "jar");
-		publicationComponent.addVariantsFromConfiguration( runtimeElements, (details) -> {
-			details.mapToMavenScope( "runtime" );
-		} );
+		publicationComponent.addVariantsFromConfiguration( runtimeElements, (details) -> details.mapToMavenScope( "runtime" ) );
 
 
 		final Configuration javadocElements = project.getConfigurations().maybeCreate( sourceSet.getJavadocElementsConfigurationName() );
@@ -423,9 +396,7 @@ public class QuarkusExtensionPlugin implements Plugin<Project> {
 		final ConfigurationPublications javadocElementsOutgoing = javadocElements.getOutgoing();
 		javadocElements.getOutgoing().artifact( javadocJarTask );
 		javadocElementsOutgoing.getAttributes().attribute( ArtifactAttributes.ARTIFACT_FORMAT, "jar");
-		publicationComponent.addVariantsFromConfiguration( javadocElements, (details) -> {
-			details.mapToMavenScope( "runtime" );
-		} );
+		publicationComponent.addVariantsFromConfiguration( javadocElements, (details) -> details.mapToMavenScope( "runtime" ) );
 
 
 		final Configuration sourcesElements = project.getConfigurations().maybeCreate( sourceSet.getSourcesElementsConfigurationName() );
@@ -438,9 +409,7 @@ public class QuarkusExtensionPlugin implements Plugin<Project> {
 		final ConfigurationPublications sourcesElementsOutgoing = sourcesElements.getOutgoing();
 		sourcesElements.getOutgoing().artifact( sourcesJarTask );
 		sourcesElementsOutgoing.getAttributes().attribute( ArtifactAttributes.ARTIFACT_FORMAT, "jar");
-		publicationComponent.addVariantsFromConfiguration( sourcesElements, (details) -> {
-			details.mapToMavenScope( "runtime" );
-		} );
+		publicationComponent.addVariantsFromConfiguration( sourcesElements, (details) -> details.mapToMavenScope( "runtime" ) );
 	}
 
 	private void prepareSpi(Project project) {
@@ -469,185 +438,119 @@ public class QuarkusExtensionPlugin implements Plugin<Project> {
 	/**
 	 * We need to adjust:
 	 *
-	 * 	- the deployment pom file to add main as a dependency by its GAV
-	 * 	- the main pom file to add spi as a dependency by its GAV
-	 * 	- the deployment Gradle module descriptor to adjust `deploymentApiElements`, etc
-	 * 	- the spi Gradle module descriptor to adjust `spiApiElements`, etc
+	 * 	- the `deployment` pom and module descriptor files to add `runtime` as a dependency by its GAV
+	 * 	- the `runtime` pom and module descriptor files to add `spi` as a dependency by its GAV
+	 * 	- the `deployment` Gradle module descriptor to adjust `deploymentApiElements`, etc
+	 * 	- the `spi` Gradle module descriptor to adjust `spiApiElements`, etc
 	 */
 	private void applyAdjustments(Project project) {
 		final TaskContainer taskContainer = project.getTasks();
+
+		final Task generatePomFiles = taskContainer.create( "generatePomFiles" );
+		final Task generateMetadataFiles = taskContainer.create( "generateMetadataFiles" );
+		final Task preparePublications = taskContainer.create( "preparePublications" );
+		preparePublications.dependsOn( generatePomFiles, generateMetadataFiles );
+
 		taskContainer.all( (task) -> {
 			if ( task.getName().equals( "generatePomFileForRuntimePublication" ) ) {
 				final GenerateMavenPom runtimePomTask = (GenerateMavenPom) task;
-				//do not convert this to a lambda - causes the tasks to not be cacheable
-				//noinspection Convert2Lambda
-				runtimePomTask.doLast( new Action<>() {
-					@Override
-					public void execute(@SuppressWarnings("NullableProblems") Task task) {
-						applyDependency( runtimePomTask.getDestination(), project.getName() + "-spi", project );
-					}
-				} );
+				adjustRuntimePomGeneration( runtimePomTask, project );
+				generatePomFiles.dependsOn( runtimePomTask );
 			}
 			else if ( task.getName().equals( "generatePomFileForDeploymentPublication" ) ) {
 				final GenerateMavenPom deploymentPomTask = (GenerateMavenPom) task;
-				deploymentPomTask.setDescription( "Generate the pom file for the `deployment` publication" );
-				//do not convert this to a lambda - causes the tasks to not be cacheable
-				//noinspection Convert2Lambda
-				deploymentPomTask.doLast( new Action<>() {
-					@Override
-					public void execute(@SuppressWarnings("NullableProblems") Task task) {
-						applyDependency( deploymentPomTask.getDestination(), project.getName(), project );
-					}
-				} );
+				adjustDeploymentPomGeneration( deploymentPomTask, project );
+				generatePomFiles.dependsOn( deploymentPomTask );
 			}
 			else if ( task.getName().equals( "generatePomFileForSpiPublication" ) ) {
 				final GenerateMavenPom spiPomTask = (GenerateMavenPom) task;
-				spiPomTask.setDescription( "Generate the pom file for the `spi` publication" );
+				adjustSpiPomGeneration( spiPomTask, project );
+				generatePomFiles.dependsOn( spiPomTask );
+			}
+			else if ( task.getName().equals( "generateMetadataFileForRuntimePublication" ) ) {
+				final GenerateModuleMetadata runtimeModuleTask = (GenerateModuleMetadata) task;
+				adjustRuntimeMetadataGeneration( runtimeModuleTask, project );
+				generateMetadataFiles.dependsOn( runtimeModuleTask );
 			}
 			else if ( task.getName().equals( "generateMetadataFileForDeploymentPublication" ) ) {
 				final GenerateModuleMetadata deploymentModuleTask = (GenerateModuleMetadata) task;
-				task.setDescription( "Generate the module descriptor file for the `deployment` publication" );
-
-				//do not convert this to a lambda - causes the tasks to not be cacheable
-				//noinspection Convert2Lambda
-				deploymentModuleTask.doLast( new Action<>() {
-					@Override
-					public void execute(@SuppressWarnings("NullableProblems") Task task) {
-						adjustVariantNames( "deployment", deploymentModuleTask.getOutputFile().get(), project );
-					}
-				} );
+				adjustDeploymentMetadataGeneration( deploymentModuleTask, project );
+				generateMetadataFiles.dependsOn( deploymentModuleTask );
 			}
 			else if ( task.getName().equals( "generateMetadataFileForSpiPublication" ) ) {
 				final GenerateModuleMetadata spiModuleTask = (GenerateModuleMetadata) task;
-				task.setDescription( "Generate the module descriptor file for the `spi` publication" );
-
-				//do not convert this to a lambda - causes the tasks to not be cacheable
-				//noinspection Convert2Lambda
-				spiModuleTask.doLast( new Action<>() {
-					@Override
-					public void execute(@SuppressWarnings("NullableProblems") Task task) {
-						adjustVariantNames( "spi", spiModuleTask.getOutputFile().get(), project );
-					}
-				} );
+				adjustSpiMetadataGeneration( spiModuleTask, project );
+				generateMetadataFiles.dependsOn( spiModuleTask );
 			}
 		} );
 	}
 
-	private void applyDependency(File pomFile, String artifactId, Project project) {
-		final DocumentBuilderFactory dbf = DocumentBuilderFactory.newInstance();
-		try {
-			final DocumentBuilder db = dbf.newDocumentBuilder();
-			final Document document = db.parse( pomFile );
-
-			final Node dependenciesNode;
-			final NodeList dependenciesList = document.getDocumentElement().getElementsByTagName( "dependencies" );
-			if ( dependenciesList.item( 0 ) == null ) {
-				dependenciesNode = document.createElement( "dependencies" );
-				document.getDocumentElement().appendChild( dependenciesNode );
+	private void adjustRuntimePomGeneration(GenerateMavenPom runtimePomTask, Project project) {
+		//do not convert this to a lambda - causes the tasks to not be cacheable
+		//noinspection Convert2Lambda
+		runtimePomTask.doLast( new Action<>() {
+			@Override
+			public void execute(@SuppressWarnings("NullableProblems") Task task) {
+				PomAdjuster.applyDependency( runtimePomTask.getDestination(), project.getName() + "-spi", project );
 			}
-			else {
-				dependenciesNode = dependenciesList.item( 0 );
-			}
-
-			final Element dependencyNode = document.createElement( "dependency" );
-			dependenciesNode.appendChild( dependencyNode );
-
-			final Element groupIdNode = document.createElement( "groupId" );
-			groupIdNode.setTextContent( project.getGroup().toString() );
-			dependencyNode.appendChild( groupIdNode );
-
-			final Element artifactIdNode = document.createElement( "artifactId" );
-			artifactIdNode.setTextContent( artifactId );
-			dependencyNode.appendChild( artifactIdNode );
-			dependencyNode.appendChild( groupIdNode );
-
-			final Element versionNode = document.createElement( "version" );
-			versionNode.setTextContent( project.getVersion().toString() );
-			dependencyNode.appendChild( versionNode );
-
-			final DOMSource source = new DOMSource( document );
-			final FileWriter writer = new FileWriter( pomFile );
-			final StreamResult result = new StreamResult( writer );
-
-			final Transformer transformer = createTransformer();
-			try {
-				transformer.transform( source, result );
-			}
-			catch (TransformerException e) {
-				throw new RuntimeException( "Unable to write XML to file", e );
-			}
-		}
-		catch (ParserConfigurationException | SAXException | IOException e) {
-			throw new RuntimeException( "Unable to parse XML", e );
-		}
+		} );
 	}
 
-	private void adjustVariantNames(String publicationName, RegularFile moduleFile, Project project) {
-		final File moduleFileAsFile = moduleFile.getAsFile();
-		// would be a lot nicer to process these through json-b..
-
-		final long moduleFileAsFileLastModified = moduleFileAsFile.lastModified();
-
-		final List<String> lines = new ArrayList<>();
-
-		try ( final LineNumberReader fileReader = new LineNumberReader( new FileReader( moduleFileAsFile ) ) ) {
-			String line = fileReader.readLine();
-			while ( line != null ) {
-				final String trimmedLine = line.trim();
-				if ( trimmedLine.equals( "\"name\": \"" + publicationName + "ApiElements\"," ) ) {
-					lines.add( "      \"name\": \"apiElements\"," );
-				}
-				else if ( trimmedLine.equals( "\"name\": \"" + publicationName + "RuntimeElements\"," ) ) {
-					lines.add( "      \"name\": \"runtimeElements\"," );
-				}
-				else if ( trimmedLine.equals( "\"name\": \"" + publicationName + "JavadocElements\"," ) ) {
-					lines.add( "      \"name\": \"javadocElements\"," );
-				}
-				else if ( trimmedLine.equals( "\"name\": \"" + publicationName + "SourcesElements\"," ) ) {
-					lines.add( "      \"name\": \"sourcesElements\"," );
-				}
-				else {
-					lines.add( line );
-				}
-
-				line = fileReader.readLine();
+	private void adjustDeploymentPomGeneration(GenerateMavenPom deploymentPomTask, Project project) {
+		deploymentPomTask.setDescription( "Generate the pom file for the `deployment` publication" );
+		//do not convert this to a lambda - causes the tasks to not be cacheable
+		//noinspection Convert2Lambda
+		deploymentPomTask.doLast( new Action<>() {
+			@Override
+			public void execute(@SuppressWarnings("NullableProblems") Task task) {
+				PomAdjuster.applyDependency( deploymentPomTask.getDestination(), project.getName(), project );
 			}
-		}
-		catch (IOException e) {
-			throw new RuntimeException( "Could read Gradle module metadata file - " + moduleFileAsFile.getAbsolutePath(), e );
-		}
-
-		try ( final FileWriter fileWriter = new FileWriter( moduleFileAsFile ) ) {
-			for ( String line : lines ) {
-				fileWriter.write( line );
-				fileWriter.write( Character.LINE_SEPARATOR );
-			}
-			fileWriter.flush();
-		}
-		catch (IOException e) {
-			throw new RuntimeException( "Could re-write Gradle module metadata file - " + moduleFileAsFile.getAbsolutePath(), e );
-		}
-
-		if ( moduleFileAsFile.lastModified() != moduleFileAsFileLastModified ) {
-			if ( !moduleFileAsFile.setLastModified( moduleFileAsFileLastModified ) ) {
-				project.getLogger().info(
-						"Unable to reset last-modified timestamp for Gradle module metadata file - {}; up-to-date checks may be affected",
-						moduleFileAsFile.getAbsolutePath()
-				);
-			}
-		}
+		} );
 	}
 
-	private Transformer createTransformer() {
-		try {
-			final Transformer transformer = TransformerFactory.newInstance().newTransformer();
-			transformer.setOutputProperty( OutputKeys.INDENT, "yes" );
-			transformer.setOutputProperty( "{http://xml.apache.org/xslt}indent-amount", "4" );
-			return transformer;
-		}
-		catch (TransformerConfigurationException e) {
-			throw new RuntimeException( "Unable to create XML transformer", e );
-		}
+	static void adjustSpiPomGeneration(GenerateMavenPom spiPomTask, @SuppressWarnings("unused") Project project) {
+		spiPomTask.setDescription( "Generate the pom file for the `spi` publication" );
+	}
+
+	private void adjustRuntimeMetadataGeneration(GenerateModuleMetadata runtimeModuleTask, Project project) {
+		runtimeModuleTask.setDescription( "Generate the module descriptor file for the `runtime` publication" );
+
+		//do not convert this to a lambda - causes the tasks to not be cacheable
+		//noinspection Convert2Lambda
+		runtimeModuleTask.doLast( new Action<>() {
+			@Override
+			public void execute(@SuppressWarnings("NullableProblems") Task task) {
+				ModuleMetadataAdjuster.runtimeAdjustments( runtimeModuleTask.getOutputFile().get(), project );
+			}
+		} );
+	}
+
+	private void adjustDeploymentMetadataGeneration(GenerateModuleMetadata deploymentModuleTask, Project project) {
+		deploymentModuleTask.setDescription( "Generate the module descriptor file for the `deployment` publication" );
+
+		// should add the `runtime` artifact as a dependency
+
+		//do not convert this to a lambda - causes the tasks to not be cacheable
+		//noinspection Convert2Lambda
+		deploymentModuleTask.doLast( new Action<>() {
+			@Override
+			public void execute(@SuppressWarnings("NullableProblems") Task task) {
+				ModuleMetadataAdjuster.deploymentAdjustments( deploymentModuleTask.getOutputFile().get(), project );
+			}
+		} );
+	}
+
+	private void adjustSpiMetadataGeneration(GenerateModuleMetadata spiModuleTask, Project project) {
+		spiModuleTask.setDescription( "Generate the module descriptor file for the `spi` publication" );
+
+		//do not convert this to a lambda - causes the tasks to not be cacheable
+		//noinspection Convert2Lambda
+		spiModuleTask.doLast( new Action<>() {
+			@Override
+			public void execute(@SuppressWarnings("NullableProblems") Task task) {
+				ModuleMetadataAdjuster.spiAdjustments( spiModuleTask.getOutputFile().get(), project );
+			}
+		} );
 	}
 
 }

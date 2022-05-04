@@ -10,7 +10,7 @@ group = 'io.github.sebersole.quarkus'
 version = '1.0-SNAPSHOT'
 
 dependencies {
-    quarkusPlatforms enforcedPlatform( 'io.quarkus:quarkus-bom:2.8.0.Final' )
+    quarkusPlatforms platform( 'io.quarkus:quarkus-bom:2.8.0.Final' )
 
     testImplementation 'org.junit.jupiter:junit-jupiter-api:5.8.1'
     testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.8.1'

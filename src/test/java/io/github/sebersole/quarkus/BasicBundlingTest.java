@@ -22,11 +22,15 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import io.github.sebersole.quarkus.tasks.GenerateDescriptor;
+import jakarta.json.Json;
+import jakarta.json.JsonArray;
+import jakarta.json.JsonObject;
 
 import static io.github.sebersole.quarkus.tasks.GenerateDescriptor.STANDARD_YAML_PATH;
 import static io.github.sebersole.quarkus.tasks.GenerateDescriptor.YAML_NAME;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.gradle.testkit.runner.TaskOutcome.SUCCESS;
+import static org.junit.jupiter.api.Assertions.fail;
 
 /**
  * @author Steve Ebersole
@@ -35,13 +39,16 @@ public class BasicBundlingTest {
 
 	@Test
 	public void testBundle(@TempDir Path projectDir) {
+		System.out.println( "#########################################################################" );
+		System.out.println( "Project dir : " + projectDir.toFile().getAbsolutePath() );
+		System.out.println( "#########################################################################" );
 		prepareProjectDir( projectDir );
 
 		final GradleRunner gradleRunner = GradleRunner.create()
 				.withProjectDir( projectDir.toFile() )
 				.withPluginClasspath()
 				.withDebug( true )
-				.withArguments( "build", "--stacktrace", "--no-build-cache" )
+				.withArguments( "build", "preparePublications", "--stacktrace", "--no-build-cache" )
 				.forwardOutput();
 
 		final BuildResult buildResult = gradleRunner.build();
@@ -77,6 +84,83 @@ public class BasicBundlingTest {
 		checkExtensionDescriptor( buildDir, jar );
 		checkConfigRoots( buildDir, jar );
 		checkExtensionProperties( buildDir, jar );
+
+		checkForPomDescriptor( new File( buildDir, "publications/runtime" ), "basic-extension-spi" );
+		checkModuleDescriptor( new File( buildDir, "publications/runtime" ), "basic-extension-spi" );
+	}
+
+	private void checkForPomDescriptor(File publicationDir, String dependencyArtifactId) {
+		final String check = String.format(
+				Locale.ROOT,
+				"<artifactId>%s</artifactId>",
+				dependencyArtifactId
+		);
+
+		final File pomFile = new File( publicationDir, "pom-default.xml" );
+		accessContent( pomFile, (reader) -> {
+			String line = reader.readLine();
+			while ( line != null ) {
+				if ( check.equals( line.trim() ) ) {
+					return;
+				}
+				line = reader.readLine();
+			}
+
+			fail( "Could not find dependency `" + check + "` in `" + pomFile.getAbsolutePath() + "`" );
+		} );
+	}
+
+	private void accessContent(File file, ContentAccess contentAccess) {
+		assertThat( file ).exists();
+
+		try ( final LineNumberReader reader = new LineNumberReader( new FileReader( file ) ) ) {
+			contentAccess.accessContent( reader );
+		}
+		catch (IOException e) {
+			fail( "Error accessing content of file " + file.getAbsolutePath(), e );
+		}
+	}
+
+	@FunctionalInterface
+	private interface ContentAccess {
+		void accessContent(LineNumberReader reader) throws IOException;
+	}
+
+	private void checkModuleDescriptor(File publicationDir, String dependencyArtifactId) {
+		final File metadataFile = new File( publicationDir, "module.json" );
+		accessContent( metadataFile, (reader) -> {
+			final JsonObject json = Json.createReader( reader ).readObject();
+//			final JsonObject json = Json.createParser( reader ).getObject();
+			final JsonArray variants = json.getJsonArray( "variants" );
+			for ( int v = 0; v < variants.size(); v++ ) {
+				boolean found = false;
+				final JsonObject variant = variants.getJsonObject( v );
+
+				final String variantName = variant.getString( "name" );
+				assertThat( variantName ).doesNotContain( "deployment", "spi" );
+
+				final JsonArray dependencies = variant.getJsonArray( "dependencies" );
+				for ( int d = 0; d < dependencies.size(); d++ ) {
+					final JsonObject dependency = dependencies.getJsonObject( d );
+					if ( "io.github.sebersole.quarkus".equals( dependency.getString( "group" ) )
+							&& dependencyArtifactId.equals( dependency.getString( "module" ) ) ) {
+						found = true;
+					}
+				}
+
+				if ( !found ) {
+					fail(
+							String.format(
+									Locale.ROOT,
+									"Could not find `%s` dependency as part of `%s` variant in `%s`",
+									dependencyArtifactId,
+									variantName,
+									metadataFile.getAbsolutePath()
+							)
+					);
+				}
+			}
+		} );
 	}
 
 	private void checkExtensionDescriptor(File buildDir, File jar) {
@@ -203,6 +287,9 @@ public class BasicBundlingTest {
 		assertThat( jar ).exists();
 
 		checkBuildSteps( buildDir, jar );
+
+		checkForPomDescriptor( new File( buildDir, "publications/deployment" ), "basic-extension" );
+		checkModuleDescriptor( new File( buildDir, "publications/deployment" ), "basic-extension" );
 	}
 
 	private void checkBuildSteps(File buildDir, File jar) {

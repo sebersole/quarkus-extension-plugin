@@ -45,6 +45,7 @@ src/
     resources/
 ```
 
+The `deployment`, `spi` and `test` source-sets are optional.
 
 === Platforms
 
@@ -90,7 +91,7 @@ We have the following configurable Dependency Configurations:
 - `deploymentCompileOnlyApi`
 - `deploymentRuntimeOnly`
 
-The runtime artifact is added as a `deploymentCompileOnly` dependency
+The runtime artifact is added as a `deploymentImplementation` dependency
 
 
 === SPI SourceSet
