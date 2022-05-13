@@ -46,12 +46,11 @@ public abstract class VerifyDeploymentDependencies extends DefaultTask {
 	private final Property<Configuration> deploymentDependencies;
 	private final Provider<RegularFile> dependencyCatalog;
 
-	private final Provider<RegularFile> output;
-
 	@Inject
 	public VerifyDeploymentDependencies(@SuppressWarnings("unused") ExtensionDescriptor config) {
 		setGroup( Names.TASK_GROUP );
 		setDescription( "Verifies the runtime and deployment classpaths for the Quarkus extension" );
+		getOutputs().upToDateWhen( (task) -> true );
 
 		final JavaPluginExtension javaPluginExtension = getProject().getExtensions().getByType( JavaPluginExtension.class );
 		final SourceSetContainer sourceSets = javaPluginExtension.getSourceSets();
@@ -72,8 +71,6 @@ public abstract class VerifyDeploymentDependencies extends DefaultTask {
 		final VerifyExtensionDependencies verifyExtensionDependencies = (VerifyExtensionDependencies) getProject().getTasks().getByName( VerifyExtensionDependencies.TASK_NAME );
 		dependencyCatalog = verifyExtensionDependencies.getOutput();
 
-		output = getProject().getLayout().getBuildDirectory().file( "tmp/verifyQuarkusDependencies.txt" );
-
 		dependsOn( verifyExtensionDependencies );
 	}
 
@@ -88,17 +85,10 @@ public abstract class VerifyDeploymentDependencies extends DefaultTask {
 		return dependencyCatalog;
 	}
 
-	@OutputFile
-	public Provider<RegularFile> getOutput() {
-		return output;
-	}
-
 	@TaskAction
 	public void verifyDependencies() {
 		final Properties catalog = loadCatalog();
 		verifyDeploymentDependencies( catalog );
-
-		touchOutputFile();
 	}
 
 	private Properties loadCatalog() {
@@ -136,25 +126,4 @@ public abstract class VerifyDeploymentDependencies extends DefaultTask {
 			throw new ValidationException( buffer.toString() );
 		}
 	}
-
-	private void touchOutputFile() {
-		final File outputAsFile = output.get().getAsFile();
-
-		if ( ! outputAsFile.getParentFile().exists() ) {
-			if ( !outputAsFile.getParentFile().mkdirs() ) {
-				getProject().getLogger().warn( "Unable to create output file directories" );
-			}
-		}
-
-		try {
-			final boolean created = outputAsFile.createNewFile();
-			if ( !created ) {
-				getProject().getLogger().warn( "Unable to create output file" );
-			}
-		}
-		catch (IOException e) {
-			getProject().getLogger().warn( "Unable to create output file", e );
-		}
-	}
-
 }

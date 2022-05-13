@@ -13,6 +13,7 @@ import org.gradle.api.artifacts.ConfigurationPublications;
 import org.gradle.api.attributes.Bundling;
 import org.gradle.api.attributes.Category;
 import org.gradle.api.attributes.DocsType;
+import org.gradle.api.attributes.HasConfigurableAttributes;
 import org.gradle.api.attributes.LibraryElements;
 import org.gradle.api.attributes.Usage;
 import org.gradle.api.attributes.java.TargetJvmVersion;
@@ -108,6 +109,17 @@ public class QuarkusExtensionPlugin implements Plugin<Project> {
 			if ( configuration != platforms ) {
 				configuration.extendsFrom( platforms );
 			}
+
+			// todo : should we limit which Configurations this gets applied to?
+			configuration.getDependencies().all( (dep) -> {
+				if ( dep instanceof HasConfigurableAttributes ) {
+					final HasConfigurableAttributes<?> attributableDependency = (HasConfigurableAttributes<?>) dep;
+					final Category category = attributableDependency.getAttributes().getAttribute( Category.CATEGORY_ATTRIBUTE );
+					if ( category != null && "enforced-platform".equals( category.getName() ) ) {
+						throw new EnforcedPlatformException( dep, configuration );
+					}
+				}
+			} );
 		} );
 	}
 
